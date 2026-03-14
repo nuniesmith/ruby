@@ -20,6 +20,7 @@ Usage:
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 from datetime import UTC, datetime
@@ -358,7 +359,7 @@ async def analyze_assets(body: AnalyzeRequest, request: Request) -> dict:
                         result["daily_change_pct"] = round(change_pct, 2)
                         # Cache the daily change for the assets endpoint
                         if redis:
-                            try:
+                            with contextlib.suppress(Exception):
                                 redis.setex(
                                     f"pretrade:daily_change:{symbol}",
                                     _ANALYSIS_TTL,
@@ -371,8 +372,6 @@ async def analyze_assets(body: AnalyzeRequest, request: Request) -> dict:
                                         }
                                     ),
                                 )
-                            except Exception:
-                                pass
         except Exception as exc:
             result["errors"].append(f"bars: {exc}")
             logger.debug("Failed to load bars for %s: %s", symbol, exc)
@@ -411,10 +410,7 @@ async def analyze_assets(body: AnalyzeRequest, request: Request) -> dict:
                                     bullish += 1
                                 else:
                                     bearish += 1
-                    if total > 0:
-                        indicator_alignment = (bullish / total) * 100
-                    else:
-                        indicator_alignment = 50.0
+                    indicator_alignment = bullish / total * 100 if total > 0 else 50.0
                     result["indicator_alignment"] = round(indicator_alignment, 1)
             except ImportError:
                 result["errors"].append("indicators: module not available")

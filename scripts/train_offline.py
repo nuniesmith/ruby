@@ -14,7 +14,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import json
+
 import os
 import sys
 import time
@@ -367,9 +367,9 @@ def _print_split_summary(output_dir: str) -> None:
         csv_path = os.path.join(output_dir, f"{split_name}.csv")
         if os.path.isfile(csv_path):
             try:
-                with open(csv_path, "r") as f:
+                with open(csv_path) as f:
                     reader = csv_mod.reader(f)
-                    header = next(reader, None)
+                    next(reader, None)
                     row_count = sum(1 for _ in reader)
                 _info(f"{split_name}.csv: {row_count:,} rows")
             except Exception:
@@ -527,7 +527,7 @@ def main(argv: list[str] | None = None) -> int:
 
     print()
     _log(f"{'═' * 60}", CYAN)
-    _log(f"  Offline Training Pipeline", BOLD)
+    _log("  Offline Training Pipeline", BOLD)
     _log(f"{'═' * 60}", CYAN)
     print()
     _info(f"Data service: {data_url}")

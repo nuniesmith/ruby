@@ -197,7 +197,7 @@ def fix_csv(
             shutil.copy2(csv_path, bak_path)
             _info(f"Backup created: {bak_path.name}")
         except PermissionError:
-            _warn(f"Could not create backup (permission denied) — proceeding without .bak")
+            _warn("Could not create backup (permission denied) — proceeding without .bak")
     else:
         _info(f"Backup already exists: {bak_path.name}")
 

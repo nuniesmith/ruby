@@ -115,9 +115,7 @@ def is_crypto_symbol(symbol: str) -> bool:
     """
     if symbol.upper().startswith("KRAKEN:"):
         return True
-    if symbol.upper() in _CRYPTO_SHORTHANDS:
-        return True
-    return False
+    return symbol.upper() in _CRYPTO_SHORTHANDS
 
 
 def is_futures_symbol(symbol: str) -> bool:
@@ -130,10 +128,7 @@ def is_futures_symbol(symbol: str) -> bool:
     if sym in FUTURES_SYMBOLS:
         return True
     # Also check if the symbol matches a data_ticker (e.g. "MES=F")
-    for info in FUTURES_SYMBOLS.values():
-        if sym == info["data_ticker"].upper():
-            return True
-    return False
+    return any(sym == info["data_ticker"].upper() for info in FUTURES_SYMBOLS.values())
 
 
 def should_use_source(symbol: str) -> str:

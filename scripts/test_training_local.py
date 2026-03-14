@@ -316,7 +316,7 @@ def check_dataset(csv_path: str) -> tuple[bool, str, str | None]:
     # Label check
     if "label" in df.columns:
         labels = df["label"].value_counts()
-        _info("  Labels: %s" % dict(labels))
+        _info(f"  Labels: {dict(labels)}")
 
     return True, train_csv, val_csv
 

@@ -166,6 +166,10 @@ from lib.services.data.api.risk import router as risk_router  # noqa: E402
 from lib.services.data.api.settings import (  # noqa: E402
     router as settings_router,
 )
+from lib.services.data.api.simulation_api import (  # noqa: E402
+    router as sim_router,
+    sse_router as sim_sse_router,
+)
 from lib.services.data.api.sse import router as sse_router  # noqa: E402
 from lib.services.data.api.swing_actions import (  # noqa: E402
     router as swing_actions_router,
@@ -176,10 +180,6 @@ from lib.services.data.api.trades import (  # noqa: E402
 )
 from lib.services.data.api.trainer import (  # noqa: E402
     router as trainer_router,
-)
-from lib.services.data.api.simulation_api import (  # noqa: E402
-    router as sim_router,
-    sse_router as sim_sse_router,
 )
 from lib.services.data.sync import (  # noqa: E402
     DataSyncService,

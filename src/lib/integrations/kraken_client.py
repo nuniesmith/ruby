@@ -1302,7 +1302,7 @@ class KrakenFeedManager:
                     agg["trade_count"] += 1
                 else:
                     # New minute — emit the completed bar (if any), then start fresh
-                    completed_bar = agg  # may be None on first tick
+                    # completed_bar = agg (emitted implicitly; agg may be None on first tick)
                     self._tick_agg[internal_ticker] = {
                         "open": price,
                         "high": price,
