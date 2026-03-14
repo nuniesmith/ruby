@@ -92,6 +92,12 @@ ensure_venv() {
     log "Installing project + dev dependencies from pyproject.toml ..."
     pip install -e ".[dev]" -q
     ok "Dependencies up to date"
+
+    # Keep the global ruff symlink current so editors and the language server
+    # can find it without the venv being active.
+    mkdir -p "$HOME/.local/bin"
+    ln -sf "$(pwd)/$VENV_DIR/bin/ruff" "$HOME/.local/bin/ruff"
+    ok "ruff symlink updated → ~/.local/bin/ruff"
 }
 
 # ---------------------------------------------------------------------------

@@ -139,7 +139,7 @@ class BaseRedisClient(ABC):
             self.connection_params = {
                 "user": os.getenv("REDIS_USER", "default").strip(),
                 "password": "****",  # Masked for logging
-                "raw_password": os.getenv("REDIS_PASSWORD", "123456").strip(),  # Actual password
+                "raw_password": os.getenv("REDIS_PASSWORD", "").strip(),  # Actual password — set REDIS_PASSWORD in .env
                 "sentinel_hosts": sentinel_hosts,
                 "sentinel_port": sentinel_port,
                 "sentinel_master": sentinel_master,
@@ -159,7 +159,7 @@ class BaseRedisClient(ABC):
             self.connection_params = {
                 "user": os.getenv("REDIS_USER", "default").strip(),
                 "password": "****",  # Masked for logging
-                "raw_password": os.getenv("REDIS_PASSWORD", "123456").strip(),  # Actual password
+                "raw_password": os.getenv("REDIS_PASSWORD", "").strip(),  # Actual password — set REDIS_PASSWORD in .env
                 "cluster_hosts": cluster_hosts,
                 "cluster_port": cluster_port,
                 "use_sentinel": False,
@@ -172,7 +172,7 @@ class BaseRedisClient(ABC):
         else:
             # Standard Redis connection
             user = os.getenv("REDIS_USER", "default").strip()
-            password_raw = os.getenv("REDIS_PASSWORD", "123456").strip()
+            password_raw = os.getenv("REDIS_PASSWORD", "").strip()  # set REDIS_PASSWORD in .env
             host = os.getenv("REDIS_HOST", "redis").strip()
             port = os.getenv("REDIS_PORT", "6379").strip()
             db = os.getenv("REDIS_DB", "0").strip()

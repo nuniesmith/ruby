@@ -3109,7 +3109,12 @@ def _cli():
 
         from dotenv import load_dotenv  # type: ignore[import-untyped]
 
-        _env_path = Path(__file__).resolve().parents[1] / ".env"
+        # Walk up from this file's location until we find a .env at the repo root
+        _here = Path(__file__).resolve()
+        _env_path = next(
+            (p / ".env" for p in _here.parents if (p / ".env").is_file()),
+            _here.parents[3] / ".env",  # fallback: src/lib/services/training → repo root
+        )
         if _env_path.is_file():
             load_dotenv(_env_path, override=False)
     except ImportError:

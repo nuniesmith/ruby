@@ -134,8 +134,8 @@ def _load_massive_api_key() -> str | None:
     if key:
         return key
 
-    # Try to read from ~/github/rb/.env
-    rb_env = Path.home() / "github" / "rb" / ".env"
+    # Try to read from ~/github/ruby/.env
+    rb_env = Path.home() / "github" / "ruby" / ".env"
     if rb_env.exists():
         for line in rb_env.read_text().splitlines():
             line = line.strip()
