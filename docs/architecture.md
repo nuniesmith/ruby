@@ -104,7 +104,7 @@ Rithmic (async_rithmic)
 - Ubuntu Server → data + engine + web + charting + postgres + redis + monitoring (always on, 24/7)
 - Home Laptop → trainer (on-demand, CUDA GPU, port 8501)
 
-**CI/CD (7-image matrix — `nuniesmith/futures`):**
+**CI/CD (7-image matrix — `nuniesmith/ruby`):**
 
 | Image | Platforms | Notes |
 |-------|-----------|-------|
@@ -284,7 +284,7 @@ LiveRiskPublisher (ticked every engine loop, force-publish on position change)
 Engine fires CNN-gated signal
   │
   ├─ signals_publisher.append_and_push(signal)
-  │    → signals.csv committed to nuniesmith/futures-signals (GitHub API)
+  │    → signals.csv committed to nuniesmith/ruby-signals (GitHub API)
   │    → SSE push to dashboard
   │
   ├─ Dashboard (primary decision surface)

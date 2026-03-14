@@ -12,14 +12,14 @@
 #                   ALL services — postgres, redis, data, engine, web,
 #                   charting, trainer, prometheus, grafana
 #
-# Single DockerHub repo (nuniesmith/futures) with tag-per-service:
-#   nuniesmith/futures:engine          — Engine + Data API (amd64 + arm64)
-#   nuniesmith/futures:web             — HTMX Dashboard (amd64 + arm64)
-#   nuniesmith/futures:trainer         — GPU Training Server (amd64 only)
-#   nuniesmith/futures:engine-<sha>    — Pinned engine build
-#   nuniesmith/futures:web-<sha>       — Pinned web build
-#   nuniesmith/futures:trainer-<sha>   — Pinned trainer build
-#   nuniesmith/futures:latest          — Alias for :data (default pull)
+# Single DockerHub repo (nuniesmith/ruby) with tag-per-service:
+#   nuniesmith/ruby:engine          — Engine + Data API (amd64 + arm64)
+#   nuniesmith/ruby:web             — HTMX Dashboard (amd64 + arm64)
+#   nuniesmith/ruby:trainer         — GPU Training Server (amd64 only)
+#   nuniesmith/ruby:engine-<sha>    — Pinned engine build
+#   nuniesmith/ruby:web-<sha>       — Pinned web build
+#   nuniesmith/ruby:trainer-<sha>   — Pinned trainer build
+#   nuniesmith/ruby:latest          — Alias for :data (default pull)
 #
 # Required Secrets:
 #   - TAILSCALE_OAUTH_CLIENT_ID: Tailscale OAuth Client ID
@@ -86,7 +86,7 @@ permissions:
 env:
     PYTHON_VERSION: "3.13"
     REGISTRY: docker.io
-    IMAGE_NAME: nuniesmith/futures
+    IMAGE_NAME: nuniesmith/ruby
 
 concurrency:
     group: ${{ github.workflow }}-${{ github.ref }}
@@ -198,7 +198,7 @@ jobs:
     # Stage 3: Build & Push Docker Images
     # =========================================================================
     #
-    # Single DockerHub repo (nuniesmith/futures) with tag-per-service.
+    # Single DockerHub repo (nuniesmith/ruby) with tag-per-service.
     # Each matrix entry produces two tags:
     #   :engine           (rolling latest for that service)
     #   :engine-abc1234   (pinned to commit SHA)
@@ -217,7 +217,7 @@ jobs:
     # Stage 3a: Build and push the shared base image
     #
     # The data, engine, and web service Dockerfiles all start with
-    # FROM nuniesmith/futures:base, which contains the full pyproject.toml
+    # FROM nuniesmith/ruby:base, which contains the full pyproject.toml
     # dependency set.  This job builds and pushes :base first so that the
     # parallel service matrix jobs can pull it as a cached layer instead of
     # each running their own pip install.
@@ -306,7 +306,7 @@ jobs:
                       dockerfile: docker/data/Dockerfile
                       platforms: linux/amd64,linux/arm64
                       is_default: true
-                      # Pulls FROM nuniesmith/futures:base — base must be pushed first
+                      # Pulls FROM nuniesmith/ruby:base — base must be pushed first
                       needs_base: true
                     - service: engine
                       dockerfile: docker/engine/Dockerfile
@@ -368,7 +368,7 @@ jobs:
                       ${{ env.IMAGE_NAME }}:${{ matrix.service }}-${{ steps.vars.outputs.sha_short }}
                       ${{ matrix.is_default == 'true' && format('{0}:latest', env.IMAGE_NAME) || '' }}
                   # For services that inherit from :base, pull the registry cache
-                  # so the FROM nuniesmith/futures:base layer resolves immediately
+                  # so the FROM nuniesmith/ruby:base layer resolves immediately
                   # from the registry without re-downloading the 700 MB site-packages.
                   cache-from: |
                       ${{ matrix.needs_base && format('type=registry,ref={0}:base-buildcache', env.IMAGE_NAME) || '' }}

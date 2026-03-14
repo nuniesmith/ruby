@@ -15,14 +15,14 @@
 #   grafana    — dashboards & visualization
 #
 # Docker Hub repo (built by CI/CD):
-#   nuniesmith/futures:base       — shared Python deps (arm64 + amd64)
-#   nuniesmith/futures:data       — data API service (arm64 + amd64)
-#   nuniesmith/futures:engine     — background engine worker (arm64 + amd64)
-#   nuniesmith/futures:web        — HTMX dashboard (arm64 + amd64)
-#   nuniesmith/futures:trainer    — GPU training server (amd64 only)
-#   nuniesmith/futures:prometheus — Prometheus with baked-in config (arm64 + amd64)
-#   nuniesmith/futures:grafana    — Grafana with baked-in dashboards (arm64 + amd64)
-#   nuniesmith/futures:latest     — alias for :data (default pull)
+#   nuniesmith/ruby:base       — shared Python deps (arm64 + amd64)
+#   nuniesmith/ruby:data       — data API service (arm64 + amd64)
+#   nuniesmith/ruby:engine     — background engine worker (arm64 + amd64)
+#   nuniesmith/ruby:web        — HTMX dashboard (arm64 + amd64)
+#   nuniesmith/ruby:trainer    — GPU training server (amd64 only)
+#   nuniesmith/ruby:prometheus — Prometheus with baked-in config (arm64 + amd64)
+#   nuniesmith/ruby:grafana    — Grafana with baked-in dashboards (arm64 + amd64)
+#   nuniesmith/ruby:latest     — alias for :data (default pull)
 #
 # Build order (handled automatically by depends_on + profiles):
 #   1. docker compose build base          ← slow once; cached until pyproject.toml changes
@@ -43,8 +43,8 @@ services:
     # Base — shared Python runtime image
     #
     # Installs the full pyproject.toml dependency set ONCE into a named image
-    # (nuniesmith/futures:base).  The data, engine, and web service Dockerfiles
-    # all use FROM nuniesmith/futures:base so they skip pip install entirely.
+    # (nuniesmith/ruby:base).  The data, engine, and web service Dockerfiles
+    # all use FROM nuniesmith/ruby:base so they skip pip install entirely.
     #
     # This service has no running container — it exists purely as a build
     # target.  The image: tag makes it referenceable by child services and
@@ -55,7 +55,7 @@ services:
     # All other rebuilds (src/ changes) skip this and reuse the cached layer.
     # -------------------------------------------------------------------------
     base:
-        image: nuniesmith/futures:base
+        image: nuniesmith/ruby:base
         build:
             context: .
             dockerfile: docker/base/Dockerfile
@@ -131,7 +131,7 @@ services:
     # for the data service to serve.
     # -------------------------------------------------------------------------
     data:
-        image: nuniesmith/futures:data
+        image: nuniesmith/ruby:data
         build:
             context: .
             dockerfile: docker/data/Dockerfile
@@ -139,7 +139,7 @@ services:
             # Docker Compose resolves this as a build-time dependency so
             # `docker compose build` always builds base first.
             additional_contexts:
-                base: docker-image://nuniesmith/futures:base
+                base: docker-image://nuniesmith/ruby:base
         restart: unless-stopped
         ports:
             - "8050:8000"
@@ -159,7 +159,7 @@ services:
             - ENABLE_KRAKEN_CRYPTO=${ENABLE_KRAKEN_CRYPTO:-1}
             - TRAINER_API_KEY=${TRAINER_API_KEY:-}
             - TRAINER_SERVICE_URL=${TRAINER_SERVICE_URL:-http://100.113.72.63:8200}
-            - GITHUB_SIGNALS_REPO=${GITHUB_SIGNALS_REPO:-nuniesmith/futures-signals}
+            - GITHUB_SIGNALS_REPO=${GITHUB_SIGNALS_REPO:-nuniesmith/ruby-signals}
             - LOG_LEVEL=info
             - PYTHONPATH=/app/src
             - PYTHONUNBUFFERED=1
@@ -200,12 +200,12 @@ services:
     # Trained models are stored in ./models/ and hot-reloaded by the engine.
     # -------------------------------------------------------------------------
     engine:
-        image: nuniesmith/futures:engine
+        image: nuniesmith/ruby:engine
         build:
             context: .
             dockerfile: docker/engine/Dockerfile
             additional_contexts:
-                base: docker-image://nuniesmith/futures:base
+                base: docker-image://nuniesmith/ruby:base
         restart: unless-stopped
         shm_size: 2gb
         env_file:
@@ -223,7 +223,7 @@ services:
             - ENABLE_KRAKEN_CRYPTO=${ENABLE_KRAKEN_CRYPTO:-0}
             - TRAINER_API_KEY=${TRAINER_API_KEY:-}
             - TRAINER_SERVICE_URL=${TRAINER_SERVICE_URL:-http://100.113.72.63:8200}
-            - GITHUB_SIGNALS_REPO=${GITHUB_SIGNALS_REPO:-nuniesmith/futures-signals}
+            - GITHUB_SIGNALS_REPO=${GITHUB_SIGNALS_REPO:-nuniesmith/ruby-signals}
             - LOG_LEVEL=info
             - PYTHONPATH=/app/src
             - PYTHONUNBUFFERED=1
@@ -252,12 +252,12 @@ services:
     # User-facing entry point at http://localhost:8180
     # -------------------------------------------------------------------------
     web:
-        image: nuniesmith/futures:web
+        image: nuniesmith/ruby:web
         build:
             context: .
             dockerfile: docker/web/Dockerfile
             additional_contexts:
-                base: docker-image://nuniesmith/futures:base
+                base: docker-image://nuniesmith/ruby:base
         restart: unless-stopped
         ports:
             - "8080:8080"
@@ -295,7 +295,7 @@ services:
     # Embeds in the HTMX dashboard via iframe or plain JS fetch.
     # -------------------------------------------------------------------------
     charting:
-        image: nuniesmith/futures:charting
+        image: nuniesmith/ruby:charting
         build:
             context: .
             dockerfile: docker/charting/Dockerfile
@@ -345,7 +345,7 @@ services:
     # Requires NVIDIA GPU + nvidia-container-toolkit on the host.
     # -------------------------------------------------------------------------
     trainer:
-        image: nuniesmith/futures:trainer
+        image: nuniesmith/ruby:trainer
         profiles: [training]
         build:
             context: .
@@ -475,7 +475,7 @@ services:
     # UI at http://localhost:9095
     # -------------------------------------------------------------------------
     prometheus:
-        image: nuniesmith/futures:prometheus
+        image: nuniesmith/ruby:prometheus
         build:
             context: .
             dockerfile: docker/monitoring/prometheus/Dockerfile
@@ -503,7 +503,7 @@ services:
     # UI at http://localhost:3010  (admin / admin on first login)
     # -------------------------------------------------------------------------
     grafana:
-        image: nuniesmith/futures:grafana
+        image: nuniesmith/ruby:grafana
         build:
             context: .
             dockerfile: docker/monitoring/grafana/Dockerfile

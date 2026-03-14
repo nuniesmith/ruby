@@ -15,7 +15,7 @@
 #   docker compose build data
 # =============================================================================
 
-FROM nuniesmith/futures:base
+FROM nuniesmith/ruby:base
 
 # Runtime-only apt packages not already in the base image.
 # bash is needed by entrypoint.sh (uses bash-specific syntax).

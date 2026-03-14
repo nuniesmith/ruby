@@ -57,7 +57,7 @@ by the built-in trainer service and stored in `models/`.
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Docker services** (`nuniesmith/futures`):
+**Docker services** (`nuniesmith/ruby`):
 
 | Service | Image Tag | Role | Port |
 |---|---|---|---|
@@ -92,7 +92,7 @@ Kraken REST / WebSocket      ← crypto spot only via kraken_client.py (personal
 ### 1. Clone
 
 ```bash
-git clone https://github.com/nuniesmith/futures.git
+git clone https://github.com/nuniesmith/ruby.git
 cd futures
 ```
 

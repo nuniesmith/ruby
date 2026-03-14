@@ -2,8 +2,8 @@
 
 > **Last updated**: 2026-03-14 — Oryx session: dataset paths fixed (Docker `/app/` prefix stripped from all CSVs), all 28,548 images verified on disk, 2-epoch CUDA training test passed on RTX 3080. New files created: position_intelligence.py, rithmic_position_engine.py, dom.py API, static_pages.py, chat.html, dom.html, journal.html, 6 new scripts, 93 new tests (all passing). DOM routes + static page routes registered in data service.
 
-> **Repo**: `github.com/nuniesmith/futures`
-> **Docker Hub**: `nuniesmith/futures` — `:data` · `:engine` · `:web` · `:trainer` · `:charting`
+> **Repo**: `github.com/nuniesmith/ruby`
+> **Docker Hub**: `nuniesmith/ruby` — `:data` · `:engine` · `:web` · `:trainer` · `:charting`
 > **Infrastructure**: Ubuntu Server `100.122.184.58` (data + engine + web + charting + monitoring), Oryx GPU rig `oryx` (RTX 3080 16GB, CUDA 13.1, torch 2.10+cu128 — trainer deploys here)
 >
 > 📐 **Architecture reference**: [`docs/architecture.md`](docs/architecture.md)

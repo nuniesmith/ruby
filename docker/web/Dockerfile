@@ -15,7 +15,7 @@
 #   docker compose build web
 # =============================================================================
 
-FROM nuniesmith/futures:base
+FROM nuniesmith/ruby:base
 
 WORKDIR /app
 

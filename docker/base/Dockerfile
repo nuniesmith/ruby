@@ -6,7 +6,7 @@
 # The data, engine, and web service Dockerfiles all inherit from this image
 # via:
 #
-#   FROM nuniesmith/futures:base
+#   FROM nuniesmith/ruby:base
 #
 # This eliminates the ~700 MB pip install that was previously duplicated
 # across every service build, cutting total build time by ~3-4x for the

@@ -15,7 +15,7 @@
 #   docker compose build engine
 # =============================================================================
 
-FROM nuniesmith/futures:base
+FROM nuniesmith/ruby:base
 
 # bash is needed by entrypoint.sh
 RUN apt-get update \

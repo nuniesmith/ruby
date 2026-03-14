@@ -38,7 +38,7 @@ services:
     # Requires NVIDIA GPU + nvidia-container-toolkit on the host.
     # -------------------------------------------------------------------------
     trainer:
-        image: nuniesmith/futures:trainer
+        image: nuniesmith/ruby:trainer
         build:
             context: .
             dockerfile: docker/trainer/Dockerfile
