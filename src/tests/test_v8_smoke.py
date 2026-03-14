@@ -46,8 +46,17 @@ import pytest
 # Guard: skip entire module if PyTorch is not installed.
 # The test suite runs in CI without torch — these tests should silently skip
 # rather than causing import errors that block unrelated tests.
+#
+# NOTE: test_trainer_endpoints.py injects a minimal torch *stub* into
+# sys.modules so that trainer_server can be imported without a real GPU
+# install.  pytest.importorskip() only checks for module presence, so it
+# would pass on that stub and then crash later when real torch APIs are
+# used.  We guard against that by also checking for torch.Tensor, which
+# the stub does not provide.
 # ---------------------------------------------------------------------------
 torch = pytest.importorskip("torch", reason="PyTorch not installed — skipping CNN smoke tests")
+if not hasattr(torch, "Tensor"):
+    pytest.skip("torch stub detected (not a real PyTorch install) — skipping CNN smoke tests", allow_module_level=True)
 pytest.importorskip("torchvision", reason="torchvision not installed — skipping CNN smoke tests")
 pytest.importorskip("PIL", reason="Pillow not installed — skipping CNN smoke tests")
 

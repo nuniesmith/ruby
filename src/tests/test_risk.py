@@ -127,7 +127,7 @@ class TestCanEnterTrade:
         rm, clock = _make_rm_fn()
         # Simulate losses
         rm.register_open("MGC", "LONG", 1, 2700.0)
-        rm.register_close("MGC", 2650.0, -1600.0)  # -$1600 > -$1500 limit
+        rm.register_close("MGC", 2530.0, -3400.0)  # -$3400 < -$3300 limit
         ok, reason = rm.can_enter_trade("MNQ", "LONG", 1)
         assert ok is False
         assert "Daily loss limit" in reason
@@ -135,7 +135,7 @@ class TestCanEnterTrade:
     def test_daily_loss_not_exceeded_allows_trade(self):
         rm, clock = _make_rm_fn()
         rm.register_open("MGC", "LONG", 1, 2700.0)
-        rm.register_close("MGC", 2690.0, -100.0)  # -$100 < -$500 limit
+        rm.register_close("MGC", 2690.0, -100.0)  # -$100 well within -$3300 limit
         ok, reason = rm.can_enter_trade("MNQ", "LONG", 1)
         assert ok is True
 
@@ -279,7 +279,7 @@ class TestCanEnterTrade:
         rm = _make_rm(hour=10, minute=30)
         rm.register_open("MGC", "LONG", 1, 2700.0)
         rm.register_open("MNQ", "LONG", 1, 21000.0)
-        rm._daily_pnl = -1600.0  # exceeds -$1500 limit
+        rm._daily_pnl = -3400.0  # exceeds -$3300 limit
         ok, reason = rm.can_enter_trade("MES", "LONG", 1)
         assert ok is False
         assert "cutoff" in reason.lower()
@@ -516,7 +516,7 @@ class TestGetStatus:
 
     def test_status_blocked_daily_loss(self):
         rm = _make_rm(hour=8)
-        rm._daily_pnl = -1600.0  # exceeds -$1500 limit
+        rm._daily_pnl = -3400.0  # exceeds -$3300 limit
         status = rm.get_status()
         assert status["can_trade"] is False
         assert "daily loss" in status["block_reason"]
