@@ -1,0 +1,788 @@
+/* ============================================================================
+   Ruby Futures — Charting Service Styles
+   Dark theme, matches the main dashboard aesthetic.
+   ============================================================================ */
+
+/* ── Reset / Base ─────────────────────────────────────────────────────────── */
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+:root {
+    /* Palette */
+    --bg-base: #0d0f14;
+    --bg-surface: #13161e;
+    --bg-elevated: #1a1e2a;
+
+    --border: #252a36;
+    --border-subtle: #1c2030;
+
+    --text-primary: #e2e8f0;
+    --text-secondary: #8892a4;
+    --text-muted: #4a5568;
+
+    --accent: #6366f1;
+    --accent-hover: #818cf8;
+    --accent-glow: rgba(99, 102, 241, 0.18);
+
+    --green: #22c55e;
+    --red: #ef4444;
+    --yellow: #eab308;
+    --blue: #3b82f6;
+
+    /* Sizes */
+    --topbar-h: 44px;
+    --statusbar-h: 28px;
+    --radius: 6px;
+    --radius-sm: 4px;
+
+    /* Font */
+    --font-mono:
+        "JetBrains Mono", "Fira Code", "Cascadia Code", ui-monospace, monospace;
+    --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+}
+
+html,
+body {
+    height: 100%;
+    background: var(--bg-base);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    line-height: 1.5;
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* ── Layout skeleton ──────────────────────────────────────────────────────── */
+body {
+    display: flex;
+    flex-direction: column;
+    height: 100dvh;
+}
+
+/* ── Top bar ──────────────────────────────────────────────────────────────── */
+.topbar {
+    flex: 0 0 var(--topbar-h);
+    height: var(--topbar-h);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0 14px;
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--border);
+    z-index: 100;
+    overflow: hidden;
+}
+
+.topbar-left,
+.topbar-center,
+.topbar-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.topbar-left {
+    flex: 0 0 auto;
+}
+.topbar-center {
+    flex: 1 1 auto;
+    justify-content: center;
+    overflow: hidden;
+}
+.topbar-right {
+    flex: 0 0 auto;
+    gap: 10px;
+}
+
+/* Logo */
+.logo {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: var(--accent-hover);
+    white-space: nowrap;
+    user-select: none;
+}
+
+/* Divider */
+.divider {
+    color: var(--border);
+    font-weight: 300;
+    user-select: none;
+}
+
+.flex-spacer {
+    flex: 1 1 auto;
+}
+
+/* ── Connection status dot ────────────────────────────────────────────────── */
+.status-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    transition: background 0.3s;
+}
+
+.status-dot.status-ok {
+    background: var(--green);
+    box-shadow: 0 0 5px var(--green);
+}
+.status-dot.status-connecting {
+    background: var(--yellow);
+    animation: pulse-dot 1.2s ease-in-out infinite;
+}
+.status-dot.status-error {
+    background: var(--red);
+    box-shadow: 0 0 5px var(--red);
+}
+
+@keyframes pulse-dot {
+    0%,
+    100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.3;
+    }
+}
+
+.status-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+/* ── Symbol tabs ──────────────────────────────────────────────────────────── */
+.symbol-tabs {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.symbol-tabs::-webkit-scrollbar {
+    display: none;
+}
+
+.tab-loading {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+.symbol-btn {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 10px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+    transition:
+        color 0.15s,
+        background 0.15s,
+        border-color 0.15s;
+    user-select: none;
+}
+
+.symbol-btn:hover {
+    background: var(--bg-elevated);
+    color: var(--text-primary);
+    border-color: var(--border);
+}
+
+.symbol-btn.active {
+    background: var(--accent-glow);
+    color: var(--accent-hover);
+    border-color: var(--accent);
+}
+
+.symbol-btn .symbol-ticker {
+    font-size: 9px;
+    color: var(--text-muted);
+    margin-left: 2px;
+}
+
+.symbol-btn.active .symbol-ticker {
+    color: var(--accent);
+}
+
+/* ── Interval tabs ────────────────────────────────────────────────────────── */
+.interval-tabs {
+    display: flex;
+    align-items: center;
+    gap: 1px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 2px;
+}
+
+.interval-btn {
+    padding: 2px 8px;
+    background: transparent;
+    border: none;
+    border-radius: 3px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    cursor: pointer;
+    transition:
+        background 0.12s,
+        color 0.12s;
+    white-space: nowrap;
+    user-select: none;
+}
+
+.interval-btn:hover {
+    background: var(--border);
+    color: var(--text-primary);
+}
+.interval-btn.active {
+    background: var(--accent);
+    color: #fff;
+}
+
+/* ── Days select ──────────────────────────────────────────────────────────── */
+.days-select {
+    padding: 3px 24px 3px 8px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%238892a4'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 7px center;
+    outline: none;
+    transition: border-color 0.15s;
+}
+
+.days-select:hover {
+    border-color: var(--accent);
+}
+.days-select:focus {
+    border-color: var(--accent);
+}
+.days-select option {
+    background: var(--bg-elevated);
+    color: var(--text-primary);
+}
+
+/* ── Live toggle ──────────────────────────────────────────────────────────── */
+.live-toggle {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.live-toggle input {
+    display: none;
+}
+
+.toggle-track {
+    position: relative;
+    width: 28px;
+    height: 16px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    transition:
+        background 0.2s,
+        border-color 0.2s;
+}
+
+.toggle-thumb {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 10px;
+    height: 10px;
+    background: var(--text-muted);
+    border-radius: 50%;
+    transition:
+        transform 0.2s,
+        background 0.2s;
+}
+
+.live-toggle input:checked + .toggle-track {
+    background: rgba(34, 197, 94, 0.2);
+    border-color: var(--green);
+}
+
+.live-toggle input:checked + .toggle-track .toggle-thumb {
+    transform: translateX(12px);
+    background: var(--green);
+}
+
+.toggle-label {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+/* ── Chart wrap ───────────────────────────────────────────────────────────── */
+.chart-wrap {
+    flex: 1 1 auto;
+    position: relative;
+    overflow: hidden;
+    background: var(--bg-base);
+}
+
+/* Primary chart container — participates in the chart-wrap flex column.
+   ApexCharts is told height: "100%" so it fills this element.
+   When the RSI pane is hidden this takes all available space (flex: 1 1 auto).
+   The duplicate declaration added by the RSI section below overrides these. */
+.chart-container {
+    position: relative;
+    width: 100%;
+    /* height is controlled by flex — do not use position: absolute here */
+}
+
+/* ── Loading overlay ──────────────────────────────────────────────────────── */
+.chart-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    background: var(--bg-base);
+    z-index: 10;
+    transition: opacity 0.3s;
+}
+
+.chart-overlay.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.overlay-msg {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+}
+
+/* ── Error banner ─────────────────────────────────────────────────────────── */
+.error-banner {
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 14px;
+    background: rgba(239, 68, 68, 0.12);
+    border: 1px solid rgba(239, 68, 68, 0.4);
+    border-radius: var(--radius);
+    color: #fca5a5;
+    font-size: 12px;
+    font-family: var(--font-mono);
+    z-index: 20;
+    max-width: 90%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: opacity 0.3s;
+}
+
+.error-banner.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.error-banner button {
+    background: none;
+    border: none;
+    color: #fca5a5;
+    cursor: pointer;
+    font-size: 14px;
+    padding: 0 2px;
+    flex-shrink: 0;
+    line-height: 1;
+}
+
+.error-banner button:hover {
+    color: #fff;
+}
+
+/* ── Status bar ───────────────────────────────────────────────────────────── */
+.statusbar {
+    flex: 0 0 var(--statusbar-h);
+    height: var(--statusbar-h);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 14px;
+    background: var(--bg-surface);
+    border-top: 1px solid var(--border-subtle);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-muted);
+    overflow: hidden;
+    user-select: none;
+}
+
+.stat {
+    white-space: nowrap;
+}
+
+.stat.positive {
+    color: var(--green);
+}
+.stat.negative {
+    color: var(--red);
+}
+
+/* ── SSE badge ────────────────────────────────────────────────────────────── */
+.sse-badge {
+    padding: 1px 7px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    transition:
+        background 0.2s,
+        color 0.2s;
+}
+
+.sse-badge.live {
+    background: rgba(34, 197, 94, 0.15);
+    border-color: var(--green);
+    color: var(--green);
+}
+
+.sse-badge.reconnecting {
+    background: rgba(234, 179, 8, 0.12);
+    border-color: var(--yellow);
+    color: var(--yellow);
+}
+
+.sse-badge.error {
+    background: rgba(239, 68, 68, 0.12);
+    border-color: var(--red);
+    color: var(--red);
+}
+
+/* ── Scrollbar ────────────────────────────────────────────────────────────── */
+::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+}
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: var(--text-muted);
+}
+
+/* ── Responsive — embed / iframe mode ────────────────────────────────────── */
+@media (max-width: 600px) {
+    .topbar-left .logo,
+    .topbar-left .divider,
+    .topbar-left .status-label {
+        display: none;
+    }
+
+    .topbar {
+        padding: 0 8px;
+        gap: 6px;
+    }
+
+    .days-select {
+        display: none;
+    }
+
+    .symbol-btn .symbol-ticker {
+        display: none;
+    }
+}
+
+/* ── Indicator toggle buttons ─────────────────────────────────────────────── */
+.indicator-tabs {
+    display: flex;
+    align-items: center;
+    gap: 1px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 2px;
+}
+
+.ind-btn {
+    padding: 2px 7px;
+    background: transparent;
+    border: none;
+    border-radius: 3px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+    white-space: nowrap;
+    user-select: none;
+    transition:
+        background 0.12s,
+        color 0.12s;
+}
+
+.ind-btn:hover {
+    background: var(--border);
+    color: var(--text-primary);
+}
+
+.ind-btn.active {
+    background: var(--accent);
+    color: #fff;
+}
+
+/* Per-indicator accent colours when active */
+.ind-btn.active[data-ind="ema9"] {
+    background: #0ea5e9;
+} /* sky blue  */
+.ind-btn.active[data-ind="ema21"] {
+    background: #f59e0b;
+} /* amber     */
+.ind-btn.active[data-ind="bb"] {
+    background: #8b5cf6;
+} /* violet    */
+.ind-btn.active[data-ind="vwap"] {
+    background: #ec4899;
+} /* pink      */
+.ind-btn.active[data-ind="rsi"] {
+    background: #22c55e;
+} /* green     */
+.ind-btn.active[data-ind="cvd"] {
+    background: #10b981;
+} /* emerald   */
+.ind-btn.active[data-ind="vp"] {
+    background: #f59e0b;
+} /* amber     */
+.ind-btn.active[data-ind="avwap_session"] {
+    background: #fb923c;
+} /* orange    */
+.ind-btn.active[data-ind="avwap_prevday"] {
+    background: #e879f9;
+} /* fuchsia   */
+
+/* ── RSI sub-pane ─────────────────────────────────────────────────────────── */
+
+/* When RSI is active the main chart-container shrinks and the RSI pane
+   appears below it. Both share the chart-wrap flex column. */
+.chart-wrap {
+    flex-direction: column;
+}
+
+/* Override — flex child, fills all remaining height when RSI pane is hidden,
+   or shares space with the RSI pane when it is shown. */
+.chart-container {
+    flex: 1 1 auto;
+    min-height: 0;
+    position: relative;
+}
+
+/* RSI pane — hidden until the RSI indicator is toggled on */
+.chart-rsi {
+    flex: 0 0 130px;
+    position: relative;
+    border-top: 1px solid var(--border-subtle);
+    background: var(--bg-base);
+}
+
+.chart-rsi.hidden {
+    display: none !important;
+}
+
+/* CVD pane — hidden until the CVD indicator is toggled on */
+.chart-cvd {
+    flex: 0 0 120px;
+    position: relative;
+    border-top: 1px solid var(--border-subtle);
+    background: var(--bg-base);
+}
+
+.chart-cvd.hidden {
+    display: none !important;
+}
+
+/* ── ApexCharts dark-theme overrides ─────────────────────────────────────── */
+
+/* Root container ApexCharts injects — force our background */
+.apexcharts-canvas,
+.apexcharts-canvas svg {
+    background: var(--bg-base) !important;
+}
+
+/* Toolbar icons (zoom, pan, reset, download) */
+.apexcharts-toolbar {
+    top: 6px !important;
+    right: 8px !important;
+}
+
+.apexcharts-menu-icon svg,
+.apexcharts-reset-icon svg,
+.apexcharts-zoom-icon svg,
+.apexcharts-zoomin-icon svg,
+.apexcharts-zoomout-icon svg,
+.apexcharts-pan-icon svg,
+.apexcharts-selection-icon svg {
+    fill: var(--text-muted) !important;
+    transition: fill 0.15s;
+}
+
+.apexcharts-menu-icon:hover svg,
+.apexcharts-reset-icon:hover svg,
+.apexcharts-zoom-icon:hover svg,
+.apexcharts-zoomin-icon:hover svg,
+.apexcharts-zoomout-icon:hover svg,
+.apexcharts-pan-icon:hover svg,
+.apexcharts-selection-icon:hover svg {
+    fill: var(--text-primary) !important;
+}
+
+.apexcharts-menu {
+    background: var(--bg-elevated) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: var(--radius) !important;
+    color: var(--text-secondary) !important;
+    font-family: var(--font-mono) !important;
+    font-size: 11px !important;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5) !important;
+}
+
+.apexcharts-menu-item:hover {
+    background: var(--accent-glow) !important;
+    color: var(--text-primary) !important;
+}
+
+/* Tooltip */
+.apexcharts-tooltip {
+    background: var(--bg-elevated) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: var(--radius) !important;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5) !important;
+    font-family: var(--font-mono) !important;
+    font-size: 11px !important;
+    color: var(--text-primary) !important;
+}
+
+.apexcharts-tooltip-title {
+    background: var(--bg-surface) !important;
+    border-bottom: 1px solid var(--border) !important;
+    color: var(--text-muted) !important;
+    font-size: 10px !important;
+    padding: 4px 10px !important;
+    margin-bottom: 0 !important;
+}
+
+.apexcharts-tooltip-series-group {
+    padding: 4px 10px !important;
+    background: transparent !important;
+}
+
+.apexcharts-tooltip-text-y-label {
+    color: var(--text-secondary) !important;
+}
+
+.apexcharts-tooltip-text-y-value {
+    color: var(--text-primary) !important;
+    font-weight: 600 !important;
+}
+
+/* Crosshair lines */
+.apexcharts-xcrosshairs,
+.apexcharts-ycrosshairs {
+    stroke: var(--text-muted) !important;
+    stroke-dasharray: 3 3 !important;
+    opacity: 0.6 !important;
+}
+
+/* Axis labels */
+.apexcharts-xaxis-label,
+.apexcharts-yaxis-label {
+    fill: var(--text-muted) !important;
+    font-family: var(--font-mono) !important;
+    font-size: 10px !important;
+}
+
+/* Grid lines */
+.apexcharts-gridline {
+    stroke: var(--border-subtle) !important;
+}
+
+/* Axis ticks / borders */
+.apexcharts-xaxis-tick,
+.apexcharts-yaxis-tick {
+    stroke: var(--border) !important;
+}
+
+.apexcharts-xaxis line,
+.apexcharts-yaxis line {
+    stroke: var(--border) !important;
+}
+
+/* Legend (if shown) */
+.apexcharts-legend-text {
+    color: var(--text-secondary) !important;
+    font-family: var(--font-mono) !important;
+    font-size: 11px !important;
+}
+
+/* Selection / zoom brush */
+.apexcharts-selection-rect {
+    fill: var(--accent-glow) !important;
+    stroke: var(--accent) !important;
+}
+
+/* Active pan cursor */
+.apexcharts-canvas.apexcharts-panning {
+    cursor: grabbing !important;
+}

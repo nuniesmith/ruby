@@ -1,0 +1,78 @@
+// ── Module: visualization ───────────────────────────────────────────────────
+// Part of the Ruby indicator — assembled by PineScriptGenerator
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 11. BAR COLOURING — weather heatmap
+// Above regression line → yellow → red (hot)
+// Below regression line → aqua  → yellow (cold)
+// ══════════════════════════════════════════════════════════════════════════════
+reg_line   = ta.linreg(hl2, topGLen, 0)
+dev_series = close - reg_line
+dev_std    = ta.stdev(dev_series, 200)
+clvl       = dev_std == 0 ? 0.0 : dev_series / dev_std
+clvl       := math.max(math.min(clvl, 5), -5)
+heat_col   = clvl > 0
+     ? color.from_gradient(clvl, 0,
+          math.max(ta.highest(clvl, 70), 0.0001), color.yellow, color.red)
+     : color.from_gradient(clvl,
+          math.min(ta.lowest (clvl, 70), -0.0001), 0, color.aqua, color.yellow)
+barcolor(heat_col)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 12. PLOTS
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ── ORB zone ─────────────────────────────────────────────────────────────────
+pOrbHi = plot(rangeReady ? rHigh : na, "ORB High", color.new(#2962FF, 0), 2)
+pOrbLo = plot(rangeReady ? rLow  : na, "ORB Low",  color.new(#2962FF, 0), 2)
+fill(pOrbHi, pOrbLo, color.new(#2962FF, 85), title="ORB Zone")
+
+// ── Top G channel ─────────────────────────────────────────────────────────────
+plot(tg_hi,                    "TG Resistance", color.new(#ff1100, 50), 1, plot.style_linebr)
+plot(tg_lo,                    "TG Support",    color.new(#00ffbb, 50), 1, plot.style_linebr)
+plot(showMid ? tg_mid : na,    "TG Mid",        color.new(color.gray, 75), 1, plot.style_linebr)
+
+// ── Core overlays ─────────────────────────────────────────────────────────────
+plot(showVWAP ? vwap : na, "VWAP", color.new(#FF00FF, 0), 2)
+plot(showEMA9 ? ema9 : na, "EMA9", color.new(#00BFFF, 0), 2)
+
+// ── Auto key levels ───────────────────────────────────────────────────────────
+plot(pdHigh,              "PD High",  color.new(color.blue,   60), 1, plot.style_stepline)
+plot(pdLow,               "PD Low",   color.new(color.purple, 60), 1, plot.style_stepline)
+plot(ibDone ? ibHigh : na,"IB High",  color.new(color.aqua,   55), 1, plot.style_linebr)
+plot(ibDone ? ibLow  : na,"IB Low",   color.new(color.orange, 55), 1, plot.style_linebr)
+
+// ── Background tint (bullish / bearish bias) ──────────────────────────────────
+bgcolor(close > ema9 and ao > 0 ? color.new(color.lime, 96) :
+        close < ema9 and ao < 0 ? color.new(color.red,  96) : na)
+
+// ── Entry zones — bottom / top 10 % of TG channel ────────────────────────────
+if barstate.islast and tg_range > 0
+    var box sup_box = box.new(bar_index[20], tg_lo + tg_range * 0.1, bar_index, tg_lo,
+         bgcolor=color.new(color.teal, 88), border_color=color.new(color.green, 55))
+    var box res_box = box.new(bar_index[20], tg_hi, bar_index, tg_hi - tg_range * 0.1,
+         bgcolor=color.new(color.red,  90), border_color=color.new(color.red,   55))
+    box.set_right( sup_box, bar_index)
+    box.set_top(   sup_box, tg_lo + tg_range * 0.1)
+    box.set_bottom(sup_box, tg_lo)
+    box.set_right( res_box, bar_index)
+    box.set_top(   res_box, tg_hi)
+    box.set_bottom(res_box, tg_hi - tg_range * 0.1)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 13. AUTO BREAKOUT MARKERS
+// ── ORB label only within 30 min of NY / London / Asia opens; else RB ─────────
+// ══════════════════════════════════════════════════════════════════════════════
+plotshape(orbBreakUp  and     orbWindow, "ORB ↑",  shape.triangleup,   location.belowbar, color.new(color.lime, 0), size=size.small, text="ORB")
+plotshape(orbBreakUp  and not orbWindow, "RB ↑",   shape.triangleup,   location.belowbar, color.new(color.lime, 0), size=size.small, text="RB")
+plotshape(orbBreakDn  and     orbWindow, "ORB ↓",  shape.triangledown, location.abovebar, color.new(color.red,  0), size=size.small, text="ORB")
+plotshape(orbBreakDn  and not orbWindow, "RB ↓",   shape.triangledown, location.abovebar, color.new(color.red,  0), size=size.small, text="RB")
+plotshape(sqz_fired,          "Squeeze", shape.diamond,      location.belowbar, color.new(color.yellow, 0), size=size.small, text="SQZ")
+
+// ── Top G channel dot signals — green = support, red = resistance ───────────
+plotshape(showTGDots     and strong_bot, "TG Bounce",             shape.circle,  location.belowbar, color.new(#00ffbb,  0), size=size.normal)
+plotshape(showTGDots     and strong_top, "TG Rejection",          shape.circle,  location.abovebar, color.new(#ff1100,  0), size=size.normal)
+plotshape(showSimpleDots and simple_bot, "TG Simple Support",     shape.circle,  location.belowbar, color.new(#00ffbb, 50), size=size.small)
+plotshape(showSimpleDots and simple_top, "TG Simple Resistance",  shape.circle,  location.abovebar, color.new(#ff1100, 50), size=size.small)
+plotshape(showPotDots    and pot_bot,    "TG Potential Support",  shape.diamond, location.belowbar, color.new(#00ffbb, 70), size=size.tiny)
+plotshape(showPotDots    and pot_top,    "TG Potential Resist",   shape.diamond, location.abovebar, color.new(#ff1100, 70), size=size.tiny)

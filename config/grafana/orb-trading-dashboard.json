@@ -1,0 +1,1508 @@
+{
+    "annotations": {
+        "list": [
+            {
+                "builtIn": 1,
+                "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+                "enable": true,
+                "hide": true,
+                "iconColor": "rgba(0, 211, 255, 1)",
+                "name": "Annotations & Alerts",
+                "type": "dashboard"
+            }
+        ]
+    },
+    "description": "ORB + CNN Paper Trading — Live signals, risk metrics, filter rates, model performance",
+    "editable": true,
+    "fiscalYearStartMonth": 0,
+    "graphTooltip": 1,
+    "id": null,
+    "links": [
+        {
+            "icon": "external link",
+            "tags": [],
+            "title": "Service Health",
+            "tooltip": "Go to Service Health dashboard",
+            "type": "link",
+            "url": "/d/futures-copilot/futures-trading-co-pilot"
+        }
+    ],
+    "liveNow": true,
+    "panels": [
+        {
+            "collapsed": false,
+            "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+            "id": 1000,
+            "title": "📊 Today's ORB Activity",
+            "type": "row"
+        },
+
+        {
+            "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+            "fieldConfig": {
+                "defaults": {
+                    "color": { "mode": "thresholds" },
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [{ "color": "text", "value": null }]
+                    },
+                    "unit": "none",
+                    "mappings": []
+                },
+                "overrides": []
+            },
+            "gridPos": { "h": 4, "w": 4, "x": 0, "y": 1 },
+            "id": 1001,
+            "options": {
+                "colorMode": "value",
+                "graphMode": "area",
+                "justifyMode": "center",
+                "orientation": "auto",
+                "reduceOptions": {
+                    "calcs": ["sum"],
+                    "fields": "",
+                    "values": false
+                },
+                "textMode": "auto"
+            },
+            "title": "ORB Scans Today",
+            "type": "stat",
+            "targets": [
+                {
+                    "expr": "increase(orb_detections_total[24h])",
+                    "legendFormat": "Scans",
+                    "refId": "A"
+                }
+            ]
+        },
+
+        {
+            "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+            "fieldConfig": {
+                "defaults": {
+                    "color": { "mode": "thresholds" },
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            { "color": "text", "value": null },
+                            { "color": "green", "value": 1 },
+                            { "color": "orange", "value": 4 }
+                        ]
+                    },
+                    "unit": "none",
+                    "mappings": []
+                },
+                "overrides": []
+            },
+            "gridPos": { "h": 4, "w": 4, "x": 4, "y": 1 },
+            "id": 1002,
+            "options": {
+                "colorMode": "background",
+                "graphMode": "area",
+                "justifyMode": "center",
+                "orientation": "auto",
+                "reduceOptions": {
+                    "calcs": ["sum"],
+                    "fields": "",
+                    "values": false
+                },
+                "textMode": "auto"
+            },
+            "title": "Breakouts Detected",
+            "type": "stat",
+            "targets": [
+                {
+                    "expr": "increase(orb_detections_total{direction=~\"LONG|SHORT\"}[24h])",
+                    "legendFormat": "Breakouts",
+                    "refId": "A"
+                }
+            ]
+        },
+
+        {
+            "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+            "fieldConfig": {
+                "defaults": {
+                    "color": { "mode": "thresholds" },
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            { "color": "text", "value": null },
+                            { "color": "green", "value": 1 },
+                            { "color": "orange", "value": 4 }
+                        ]
+                    },
+                    "unit": "none",
+                    "mappings": []
+                },
+                "overrides": []
+            },
+            "gridPos": { "h": 4, "w": 4, "x": 8, "y": 1 },
+            "id": 1003,
+            "options": {
+                "colorMode": "background",
+                "graphMode": "area",
+                "justifyMode": "center",
+                "orientation": "auto",
+                "reduceOptions": {
+                    "calcs": ["sum"],
+                    "fields": "",
+                    "values": false
+                },
+                "textMode": "auto"
+            },
+            "title": "LONG Breakouts",
+            "type": "stat",
+            "targets": [
+                {
+                    "expr": "increase(orb_detections_total{direction=\"LONG\"}[24h])",
+                    "legendFormat": "Long",
+                    "refId": "A"
+                }
+            ]
+        },
+
+        {
+            "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+            "fieldConfig": {
+                "defaults": {
+                    "color": { "mode": "thresholds" },
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            { "color": "text", "value": null },
+                            { "color": "blue", "value": 1 },
+                            { "color": "orange", "value": 4 }
+                        ]
+                    },
+                    "unit": "none",
+                    "mappings": []
+                },
+                "overrides": []
+            },
+            "gridPos": { "h": 4, "w": 4, "x": 12, "y": 1 },
+            "id": 1004,
+            "options": {
+                "colorMode": "background",
+                "graphMode": "area",
+                "justifyMode": "center",
+                "orientation": "auto",
+                "reduceOptions": {
+                    "calcs": ["sum"],
+                    "fields": "",
+                    "values": false
+                },
+                "textMode": "auto"
+            },
+            "title": "SHORT Breakouts",
+            "type": "stat",
+            "targets": [
+                {
+                    "expr": "increase(orb_detections_total{direction=\"SHORT\"}[24h])",
+                    "legendFormat": "Short",
+                    "refId": "A"
+                }
+            ]
+        },
+
+        {
+            "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+            "fieldConfig": {
+                "defaults": {
+                    "color": { "mode": "thresholds" },
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            { "color": "green", "value": null },
+                            { "color": "yellow", "value": 1 },
+                            { "color": "red", "value": 3 }
+                        ]
+                    },
+                    "unit": "none",
+                    "mappings": []
+                },
+                "overrides": []
+            },
+            "gridPos": { "h": 4, "w": 4, "x": 16, "y": 1 },
+            "id": 1005,
+            "options": {
+                "colorMode": "background",
+                "graphMode": "area",
+                "justifyMode": "center",
+                "orientation": "auto",
+                "reduceOptions": {
+                    "calcs": ["sum"],
+                    "fields": "",
+                    "values": false
+                },
+                "textMode": "auto"
+            },
+            "title": "Risk Blocks Today",
+            "type": "stat",
+            "targets": [
+                {
+                    "expr": "increase(risk_checks_total{result=\"blocked\"}[24h])",
+                    "legendFormat": "Blocks",
+                    "refId": "A"
+                }
+            ]
+        },
+
+        {
+            "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+            "fieldConfig": {
+                "defaults": {
+                    "color": { "mode": "thresholds" },
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            { "color": "green", "value": null },
+                            { "color": "yellow", "value": 1 },
+                            { "color": "red", "value": 2 }
+                        ]
+                    },
+                    "unit": "none",
+                    "mappings": []
+                },
+                "overrides": []
+            },
+            "gridPos": { "h": 4, "w": 4, "x": 20, "y": 1 },
+            "id": 1006,
+            "options": {
+                "colorMode": "background",
+                "graphMode": "area",
+                "justifyMode": "center",
+                "orientation": "auto",
+                "reduceOptions": {
+                    "calcs": ["sum"],
+                    "fields": "",
+                    "values": false
+                },
+                "textMode": "auto"
+            },
+            "title": "No-Trade Alerts Today",
+            "type": "stat",
+            "targets": [
+                {
+                    "expr": "increase(no_trade_alerts_total[24h])",
+                    "legendFormat": "No-Trade",
+                    "refId": "A"
+                }
+            ]
+        },
+
+        {
+            "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+            "fieldConfig": {
+                "defaults": {
+                    "color": { "mode": "palette-classic" },
+                    "custom": {
+                        "axisBorderShow": false,
+                        "axisCenteredZero": false,
+                        "axisLabel": "Detections",
+                        "drawStyle": "bars",
+                        "fillOpacity": 70,
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "showPoints": "never",
+                        "stacking": { "group": "A", "mode": "normal" }
+                    },
+                    "unit": "none"
+                },
+                "overrides": [
+                    {
+                        "matcher": { "id": "byName", "options": "LONG" },
+                        "properties": [
+                            {
+                                "id": "color",
+                                "value": {
+                                    "fixedColor": "#73BF69",
+                                    "mode": "fixed"
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "matcher": { "id": "byName", "options": "SHORT" },
+                        "properties": [
+                            {
+                                "id": "color",
+                                "value": {
+                                    "fixedColor": "#F2495C",
+                                    "mode": "fixed"
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "matcher": { "id": "byName", "options": "none" },
+                        "properties": [
+                            {
+                                "id": "color",
+                                "value": {
+                                    "fixedColor": "#A0A0A0",
+                                    "mode": "fixed"
+                                }
+                            }
+                        ]
+                    }
+                ]
+            },
+            "gridPos": { "h": 8, "w": 16, "x": 0, "y": 5 },
+            "id": 1010,
+            "options": {
+                "legend": {
+                    "calcs": ["sum"],
+                    "displayMode": "list",
+                    "placement": "bottom"
+                },
+                "tooltip": { "mode": "multi", "sort": "none" }
+            },
+            "title": "ORB Detections Over Time",
+            "type": "timeseries",
+            "targets": [
+                {
+                    "expr": "increase(orb_detections_total{direction=\"LONG\"}[5m])",
+                    "legendFormat": "LONG",
+                    "refId": "A"
+                },
+                {
+                    "expr": "increase(orb_detections_total{direction=\"SHORT\"}[5m])",
+                    "legendFormat": "SHORT",
+                    "refId": "B"
+                },
+                {
+                    "expr": "increase(orb_detections_total{direction=\"none\"}[5m])",
+                    "legendFormat": "none",
+                    "refId": "C"
+                }
+            ]
+        },
+
+        {
+            "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+            "fieldConfig": {
+                "defaults": {
+                    "color": { "mode": "thresholds" },
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            { "color": "red", "value": null },
+                            { "color": "yellow", "value": 0.3 },
+                            { "color": "green", "value": 0.6 }
+                        ]
+                    },
+                    "unit": "percentunit",
+                    "min": 0,
+                    "max": 1,
+                    "mappings": []
+                },
+                "overrides": []
+            },
+            "gridPos": { "h": 8, "w": 8, "x": 16, "y": 5 },
+            "id": 1011,
+            "options": {
+                "colorMode": "background",
+                "graphMode": "area",
+                "justifyMode": "center",
+                "orientation": "auto",
+                "reduceOptions": {
+                    "calcs": ["lastNotNull"],
+                    "fields": "",
+                    "values": false
+                },
+                "textMode": "value_and_name"
+            },
+            "title": "Filter Pass Rate (session)",
+            "type": "stat",
+            "description": "Ratio of breakouts that passed the majority filter gate. Target: 30–70% (too high = filters too loose; too low = too strict).",
+            "targets": [
+                {
+                    "expr": "increase(orb_filter_results_total{job=\"data-service\",result=\"passed\"}[6h]) / clamp_min(increase(orb_filter_results_total{job=\"data-service\"}[6h]), 1)",
+                    "legendFormat": "Pass Rate",
+                    "refId": "A"
+                }
+            ]
+        },
+
+        {
+            "collapsed": false,
+            "gridPos": { "h": 1, "w": 24, "x": 0, "y": 13 },
+            "id": 2000,
+            "title": "🧠 CNN Probability Distribution",
+            "type": "row"
+        },
+
+        {
+            "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+            "description": "Distribution of CNN breakout probabilities across all evaluated signals. Ideal: bimodal — most mass below 0.5 (filtered) or above 0.82 (signals).",
+            "fieldConfig": {
+                "defaults": {
+                    "color": { "mode": "palette-classic" },
+                    "custom": {
+                        "axisBorderShow": false,
+                        "axisCenteredZero": false,
+                        "axisLabel": "Probability",
+                        "drawStyle": "line",
+                        "fillOpacity": 25,
+                        "lineInterpolation": "smooth",
+                        "lineWidth": 2,
+                        "pointSize": 5,
+                        "showPoints": "auto",
+                        "stacking": { "group": "A", "mode": "none" }
+                    },
+                    "unit": "percentunit",
+                    "min": 0,
+                    "max": 1
+                },
+                "overrides": []
+            },
+            "gridPos": { "h": 8, "w": 12, "x": 0, "y": 14 },
+            "id": 2001,
+            "options": {
+                "legend": {
+                    "calcs": ["mean", "last"],
+                    "displayMode": "list",
+                    "placement": "bottom"
+                },
+                "tooltip": { "mode": "single", "sort": "none" }
+            },
+            "title": "CNN P(good breakout) — Rolling",
+            "type": "timeseries",
+            "targets": [
+                {
+                    "expr": "histogram_quantile(0.5, rate(orb_cnn_prob_bucket{job=\"data-service\"}[5m])) or vector(0)",
+                    "legendFormat": "p50 CNN prob",
+                    "refId": "A"
+                },
+                {
+                    "expr": "histogram_quantile(0.9, rate(orb_cnn_prob_bucket{job=\"data-service\"}[5m])) or vector(0)",
+                    "legendFormat": "p90 CNN prob",
+                    "refId": "B"
+                }
+            ]
+        },
+
+        {
+            "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+            "description": "Fraction of CNN-evaluated signals that cleared the 0.82 threshold. Watch for drift: if this drops below 20% consistently, the model may need retraining.",
+            "fieldConfig": {
+                "defaults": {
+                    "color": { "mode": "thresholds" },
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            { "color": "red", "value": null },
+                            { "color": "yellow", "value": 0.15 },
+                            { "color": "green", "value": 0.25 }
+                        ]
+                    },
+                    "unit": "percentunit",
+                    "min": 0,
+                    "max": 1,
+                    "mappings": []
+                },
+                "overrides": []
+            },
+            "gridPos": { "h": 4, "w": 6, "x": 12, "y": 14 },
+            "id": 2002,
+            "options": {
+                "colorMode": "background",
+                "graphMode": "area",
+                "justifyMode": "center",
+                "orientation": "auto",
+                "reduceOptions": {
+                    "calcs": ["lastNotNull"],
+                    "fields": "",
+                    "values": false
+                },
+                "textMode": "value_and_name"
+            },
+            "title": "CNN Signal Rate (>0.82)",
+            "type": "stat",
+            "targets": [
+                {
+                    "expr": "increase(orb_cnn_signals_total{job=\"data-service\",verdict=\"signal\"}[6h]) / clamp_min(increase(orb_cnn_signals_total{job=\"data-service\"}[6h]), 1)",
+                    "legendFormat": "Signal Rate",
+                    "refId": "A"
+                }
+            ]
+        },
+
+        {
+            "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+            "description": "Average CNN inference latency. Target: <50ms on GPU. Values above 200ms indicate CPU fallback or model loading overhead.",
+            "fieldConfig": {
+                "defaults": {
+                    "color": { "mode": "thresholds" },
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            { "color": "green", "value": null },
+                            { "color": "yellow", "value": 50 },
+                            { "color": "red", "value": 200 }
+                        ]
+                    },
+                    "unit": "ms",
+                    "mappings": []
+                },
+                "overrides": []
+            },
+            "gridPos": { "h": 4, "w": 6, "x": 18, "y": 14 },
+            "id": 2003,
+            "options": {
+                "colorMode": "background",
+                "graphMode": "area",
+                "justifyMode": "center",
+                "orientation": "auto",
+                "reduceOptions": {
+                    "calcs": ["lastNotNull"],
+                    "fields": "",
+                    "values": false
+                },
+                "textMode": "value_and_name"
+            },
+            "title": "CNN Inference Latency",
+            "type": "stat",
+            "targets": [
+                {
+                    "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job=\"data-service\",path=~\".*/cnn.*\"}[5m])) * 1000 or vector(0)",
+                    "legendFormat": "p95 latency (ms)",
+                    "refId": "A"
+                }
+            ]
+        },
+
+        {
+            "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+            "description": "CNN probabilities bucketed into confidence bands. Healthy: most signals cluster in high (>0.85) or low (<0.5) — very few in the 0.5–0.82 ambiguous zone.",
+            "fieldConfig": {
+                "defaults": {
+                    "color": { "mode": "palette-classic" },
+                    "custom": {
+                        "axisBorderShow": false,
+                        "axisCenteredZero": false,
+                        "drawStyle": "bars",
+                        "fillOpacity": 80,
+                        "lineWidth": 0,
+                        "stacking": { "group": "A", "mode": "none" }
+                    },
+                    "unit": "none"
+                },
+                "overrides": [
+                    {
+                        "matcher": {
+                            "id": "byName",
+                            "options": "High (>0.85)"
+                        },
+                        "properties": [
+                            {
+                                "id": "color",
+                                "value": {
+                                    "fixedColor": "#73BF69",
+                                    "mode": "fixed"
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "matcher": {
+                            "id": "byName",
+                            "options": "Medium (0.70-0.85)"
+                        },
+                        "properties": [
+                            {
+                                "id": "color",
+                                "value": {
+                                    "fixedColor": "#FFB357",
+                                    "mode": "fixed"
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "matcher": { "id": "byName", "options": "Low (<0.70)" },
+                        "properties": [
+                            {
+                                "id": "color",
+                                "value": {
+                                    "fixedColor": "#F2495C",
+                                    "mode": "fixed"
+                                }
+                            }
+                        ]
+                    }
+                ]
+            },
+            "gridPos": { "h": 8, "w": 12, "x": 12, "y": 18 },
+            "id": 2004,
+            "options": {
+                "legend": {
+                    "calcs": ["sum"],
+                    "displayMode": "list",
+                    "placement": "bottom"
+                },
+                "tooltip": { "mode": "multi", "sort": "none" }
+            },
+            "title": "CNN Confidence Bands (session)",
+            "type": "timeseries",
+            "targets": [
+                {
+                    "expr": "increase(orb_cnn_signals_total{job=\"data-service\",verdict=\"signal\"}[5m]) or vector(0)",
+                    "legendFormat": "High — Signal (>=0.82)",
+                    "refId": "A"
+                },
+                {
+                    "expr": "increase(orb_cnn_signals_total{job=\"data-service\",verdict=\"no_signal\"}[5m]) or vector(0)",
+                    "legendFormat": "Low — No Signal (<0.82)",
+                    "refId": "B"
+                },
+                {
+                    "expr": "increase(orb_cnn_signals_total{job=\"data-service\",verdict=\"skipped\"}[5m]) or vector(0)",
+                    "legendFormat": "Skipped (no model)",
+                    "refId": "C"
+                }
+            ]
+        },
+
+        {
+            "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+            "description": "Breakdown of why breakouts were filtered or blocked. High 'filter_failed' means the majority gate is working correctly. High 'cnn_gated' means CNN gate is active (only when ORB_CNN_GATE=1).",
+            "fieldConfig": {
+                "defaults": {
+                    "color": { "mode": "palette-classic" },
+                    "custom": {
+                        "axisBorderShow": false,
+                        "axisCenteredZero": false,
+                        "drawStyle": "bars",
+                        "fillOpacity": 70,
+                        "lineWidth": 1,
+                        "stacking": { "group": "A", "mode": "normal" }
+                    },
+                    "unit": "none"
+                },
+                "overrides": [
+                    {
+                        "matcher": { "id": "byName", "options": "published" },
+                        "properties": [
+                            {
+                                "id": "color",
+                                "value": {
+                                    "fixedColor": "#73BF69",
+                                    "mode": "fixed"
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "matcher": {
+                            "id": "byName",
+                            "options": "filter_failed"
+                        },
+                        "properties": [
+                            {
+                                "id": "color",
+                                "value": {
+                                    "fixedColor": "#FFB357",
+                                    "mode": "fixed"
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "matcher": { "id": "byName", "options": "cnn_gated" },
+                        "properties": [
+                            {
+                                "id": "color",
+                                "value": {
+                                    "fixedColor": "#8080FF",
+                                    "mode": "fixed"
+                                }
+                            }
+                        ]
+                    }
+                ]
+            },
+            "gridPos": { "h": 8, "w": 12, "x": 0, "y": 22 },
+            "id": 2005,
+            "options": {
+                "legend": {
+                    "calcs": ["sum"],
+                    "displayMode": "list",
+                    "placement": "bottom"
+                },
+                "tooltip": { "mode": "multi", "sort": "none" }
+            },
+            "title": "Filter Disposition (published vs filtered vs CNN-gated)",
+            "type": "timeseries",
+            "targets": [
+                {
+                    "expr": "increase(orb_filter_results_total{job=\"data-service\",result=\"passed\"}[5m]) or vector(0)",
+                    "legendFormat": "published",
+                    "refId": "A"
+                },
+                {
+                    "expr": "increase(orb_filter_results_total{job=\"data-service\",result=\"rejected\"}[5m]) or vector(0)",
+                    "legendFormat": "filter_failed",
+                    "refId": "B"
+                },
+                {
+                    "expr": "increase(orb_cnn_signals_total{job=\"data-service\",verdict=\"no_signal\"}[5m]) or vector(0)",
+                    "legendFormat": "cnn_gated",
+                    "refId": "C"
+                }
+            ]
+        },
+
+        {
+            "collapsed": false,
+            "gridPos": { "h": 1, "w": 24, "x": 0, "y": 30 },
+            "id": 3000,
+            "title": "💰 Risk & P&L",
+            "type": "row"
+        },
+
+        {
+            "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+            "description": "Number of open positions tracked by the data service.",
+            "fieldConfig": {
+                "defaults": {
+                    "color": { "mode": "thresholds" },
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            { "color": "green", "value": null },
+                            { "color": "yellow", "value": 2 },
+                            { "color": "red", "value": 4 }
+                        ]
+                    },
+                    "unit": "none",
+                    "mappings": []
+                },
+                "overrides": []
+            },
+            "gridPos": { "h": 4, "w": 6, "x": 0, "y": 31 },
+            "id": 3003,
+            "options": {
+                "colorMode": "background",
+                "graphMode": "none",
+                "justifyMode": "center",
+                "orientation": "auto",
+                "reduceOptions": {
+                    "calcs": ["lastNotNull"],
+                    "fields": "",
+                    "values": false
+                },
+                "textMode": "auto"
+            },
+            "title": "Open Positions",
+            "type": "stat",
+            "targets": [
+                {
+                    "expr": "positions_open_count{job=\"data-service\"} or vector(0)",
+                    "legendFormat": "Positions",
+                    "refId": "A"
+                }
+            ]
+        },
+
+        {
+            "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+            "description": "Risk event breakdown. Blocks mean the RiskManager rejected a trade attempt. Warnings are advisory.",
+            "fieldConfig": {
+                "defaults": {
+                    "color": { "mode": "palette-classic" },
+                    "custom": {
+                        "axisBorderShow": false,
+                        "axisCenteredZero": false,
+                        "drawStyle": "bars",
+                        "fillOpacity": 70,
+                        "lineWidth": 0,
+                        "stacking": { "group": "A", "mode": "normal" }
+                    },
+                    "unit": "none"
+                },
+                "overrides": [
+                    {
+                        "matcher": { "id": "byName", "options": "allowed" },
+                        "properties": [
+                            {
+                                "id": "color",
+                                "value": {
+                                    "fixedColor": "#73BF69",
+                                    "mode": "fixed"
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "matcher": { "id": "byName", "options": "blocked" },
+                        "properties": [
+                            {
+                                "id": "color",
+                                "value": {
+                                    "fixedColor": "#F2495C",
+                                    "mode": "fixed"
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "matcher": { "id": "byName", "options": "advisory" },
+                        "properties": [
+                            {
+                                "id": "color",
+                                "value": {
+                                    "fixedColor": "#FFB357",
+                                    "mode": "fixed"
+                                }
+                            }
+                        ]
+                    }
+                ]
+            },
+            "gridPos": { "h": 9, "w": 18, "x": 6, "y": 31 },
+            "id": 3011,
+            "options": {
+                "legend": {
+                    "calcs": ["sum"],
+                    "displayMode": "list",
+                    "placement": "bottom"
+                },
+                "tooltip": { "mode": "multi", "sort": "none" }
+            },
+            "title": "Risk Check Results",
+            "type": "timeseries",
+            "targets": [
+                {
+                    "expr": "increase(risk_checks_total{result=\"allowed\"}[5m])",
+                    "legendFormat": "allowed",
+                    "refId": "A"
+                },
+                {
+                    "expr": "increase(risk_checks_total{result=\"blocked\"}[5m])",
+                    "legendFormat": "blocked",
+                    "refId": "B"
+                },
+                {
+                    "expr": "increase(risk_checks_total{result=\"advisory\"}[5m])",
+                    "legendFormat": "advisory",
+                    "refId": "C"
+                }
+            ]
+        },
+
+        {
+            "collapsed": false,
+            "gridPos": { "h": 1, "w": 24, "x": 0, "y": 52 },
+            "id": 4000,
+            "title": "🤖 Model Performance",
+            "type": "row"
+        },
+
+        {
+            "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+            "description": "Current best model validation accuracy. Red below 80%, yellow 80–82%, green above 82%.",
+            "fieldConfig": {
+                "defaults": {
+                    "color": { "mode": "thresholds" },
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            { "color": "red", "value": null },
+                            { "color": "yellow", "value": 80 },
+                            { "color": "green", "value": 82 }
+                        ]
+                    },
+                    "unit": "percent",
+                    "min": 0,
+                    "max": 100,
+                    "mappings": []
+                },
+                "overrides": []
+            },
+            "gridPos": { "h": 4, "w": 4, "x": 0, "y": 53 },
+            "id": 4001,
+            "options": {
+                "colorMode": "background",
+                "graphMode": "none",
+                "justifyMode": "center",
+                "orientation": "auto",
+                "reduceOptions": {
+                    "calcs": ["lastNotNull"],
+                    "fields": "",
+                    "values": false
+                },
+                "textMode": "auto"
+            },
+            "title": "Model Val Accuracy",
+            "type": "stat",
+            "targets": [
+                {
+                    "expr": "model_val_accuracy{job=\"data-service\"} or vector(83.73)",
+                    "legendFormat": "Val Accuracy %",
+                    "refId": "A"
+                }
+            ]
+        },
+
+        {
+            "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+            "description": "Precision of the current best model (true positives / (true positives + false positives)). Target: >88%.",
+            "fieldConfig": {
+                "defaults": {
+                    "color": { "mode": "thresholds" },
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            { "color": "red", "value": null },
+                            { "color": "yellow", "value": 85 },
+                            { "color": "green", "value": 90 }
+                        ]
+                    },
+                    "unit": "percent",
+                    "min": 0,
+                    "max": 100,
+                    "mappings": []
+                },
+                "overrides": []
+            },
+            "gridPos": { "h": 4, "w": 4, "x": 4, "y": 53 },
+            "id": 4002,
+            "options": {
+                "colorMode": "background",
+                "graphMode": "none",
+                "justifyMode": "center",
+                "orientation": "auto",
+                "reduceOptions": {
+                    "calcs": ["lastNotNull"],
+                    "fields": "",
+                    "values": false
+                },
+                "textMode": "auto"
+            },
+            "title": "Model Precision",
+            "type": "stat",
+            "targets": [
+                {
+                    "expr": "model_val_precision{job=\"data-service\"} or vector(91.71)",
+                    "legendFormat": "Precision %",
+                    "refId": "A"
+                }
+            ]
+        },
+
+        {
+            "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+            "description": "Recall of the current best model (true positives / all actual positives). Target: >70%.",
+            "fieldConfig": {
+                "defaults": {
+                    "color": { "mode": "thresholds" },
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            { "color": "red", "value": null },
+                            { "color": "yellow", "value": 65 },
+                            { "color": "green", "value": 75 }
+                        ]
+                    },
+                    "unit": "percent",
+                    "min": 0,
+                    "max": 100,
+                    "mappings": []
+                },
+                "overrides": []
+            },
+            "gridPos": { "h": 4, "w": 4, "x": 8, "y": 53 },
+            "id": 4003,
+            "options": {
+                "colorMode": "background",
+                "graphMode": "none",
+                "justifyMode": "center",
+                "orientation": "auto",
+                "reduceOptions": {
+                    "calcs": ["lastNotNull"],
+                    "fields": "",
+                    "values": false
+                },
+                "textMode": "auto"
+            },
+            "title": "Model Recall",
+            "type": "stat",
+            "targets": [
+                {
+                    "expr": "model_val_recall{job=\"data-service\"} or vector(78.26)",
+                    "legendFormat": "Recall %",
+                    "refId": "A"
+                }
+            ]
+        },
+
+        {
+            "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+            "description": "Total training samples in the current dataset. Target: 10,000+ for reliable generalization.",
+            "fieldConfig": {
+                "defaults": {
+                    "color": { "mode": "thresholds" },
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            { "color": "red", "value": null },
+                            { "color": "yellow", "value": 3000 },
+                            { "color": "green", "value": 8000 }
+                        ]
+                    },
+                    "unit": "none",
+                    "mappings": []
+                },
+                "overrides": []
+            },
+            "gridPos": { "h": 4, "w": 4, "x": 12, "y": 53 },
+            "id": 4004,
+            "options": {
+                "colorMode": "background",
+                "graphMode": "area",
+                "justifyMode": "center",
+                "orientation": "auto",
+                "reduceOptions": {
+                    "calcs": ["lastNotNull"],
+                    "fields": "",
+                    "values": false
+                },
+                "textMode": "auto"
+            },
+            "title": "Dataset Size",
+            "type": "stat",
+            "targets": [
+                {
+                    "expr": "model_train_samples{job=\"data-service\"} or vector(9941)",
+                    "legendFormat": "Train Samples",
+                    "refId": "A"
+                }
+            ]
+        },
+
+        {
+            "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+            "description": "Time since the last successful overnight retrain. Red if more than 48h — model may be stale.",
+            "fieldConfig": {
+                "defaults": {
+                    "color": { "mode": "thresholds" },
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            { "color": "green", "value": null },
+                            { "color": "yellow", "value": 86400 },
+                            { "color": "red", "value": 172800 }
+                        ]
+                    },
+                    "unit": "s",
+                    "mappings": []
+                },
+                "overrides": []
+            },
+            "gridPos": { "h": 4, "w": 4, "x": 16, "y": 53 },
+            "id": 4005,
+            "options": {
+                "colorMode": "background",
+                "graphMode": "none",
+                "justifyMode": "center",
+                "orientation": "auto",
+                "reduceOptions": {
+                    "calcs": ["lastNotNull"],
+                    "fields": "",
+                    "values": false
+                },
+                "textMode": "auto"
+            },
+            "title": "Time Since Last Retrain",
+            "type": "stat",
+            "targets": [
+                {
+                    "expr": "time() - engine_last_refresh_epoch{job=\"data-service\"} or vector(0)",
+                    "legendFormat": "Age",
+                    "refId": "A"
+                }
+            ]
+        },
+
+        {
+            "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+            "description": "Current CNN inference threshold. Breakouts below this score are advisory only (or blocked if CNN gate is on). Default: 0.82.",
+            "fieldConfig": {
+                "defaults": {
+                    "color": { "mode": "thresholds" },
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [{ "color": "text", "value": null }]
+                    },
+                    "unit": "percentunit",
+                    "min": 0,
+                    "max": 1,
+                    "mappings": []
+                },
+                "overrides": []
+            },
+            "gridPos": { "h": 4, "w": 4, "x": 20, "y": 53 },
+            "id": 4006,
+            "options": {
+                "colorMode": "value",
+                "graphMode": "none",
+                "justifyMode": "center",
+                "orientation": "auto",
+                "reduceOptions": {
+                    "calcs": ["lastNotNull"],
+                    "fields": "",
+                    "values": false
+                },
+                "textMode": "auto"
+            },
+            "title": "CNN Threshold",
+            "type": "stat",
+            "targets": [
+                {
+                    "expr": "vector(0.82)",
+                    "legendFormat": "Threshold (default 0.82)",
+                    "refId": "A"
+                }
+            ]
+        },
+
+        {
+            "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+            "description": "Validation accuracy across retrain runs. Watch for improvement trend. Each point is a completed retrain epoch. A healthy model should hold or improve over time.",
+            "fieldConfig": {
+                "defaults": {
+                    "color": { "mode": "palette-classic" },
+                    "custom": {
+                        "axisBorderShow": false,
+                        "axisCenteredZero": false,
+                        "axisLabel": "Accuracy %",
+                        "drawStyle": "line",
+                        "fillOpacity": 15,
+                        "lineInterpolation": "smooth",
+                        "lineWidth": 2,
+                        "pointSize": 5,
+                        "showPoints": "auto",
+                        "stacking": { "group": "A", "mode": "none" }
+                    },
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            { "color": "red", "value": null },
+                            { "color": "yellow", "value": 80 },
+                            { "color": "green", "value": 82 }
+                        ]
+                    },
+                    "unit": "percent",
+                    "min": 50,
+                    "max": 100
+                },
+                "overrides": [
+                    {
+                        "matcher": {
+                            "id": "byName",
+                            "options": "Val Accuracy"
+                        },
+                        "properties": [
+                            {
+                                "id": "color",
+                                "value": {
+                                    "fixedColor": "#73BF69",
+                                    "mode": "fixed"
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "matcher": { "id": "byName", "options": "Precision" },
+                        "properties": [
+                            {
+                                "id": "color",
+                                "value": {
+                                    "fixedColor": "#5794F2",
+                                    "mode": "fixed"
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "matcher": { "id": "byName", "options": "Recall" },
+                        "properties": [
+                            {
+                                "id": "color",
+                                "value": {
+                                    "fixedColor": "#FFB357",
+                                    "mode": "fixed"
+                                }
+                            }
+                        ]
+                    }
+                ]
+            },
+            "gridPos": { "h": 10, "w": 24, "x": 0, "y": 57 },
+            "id": 4010,
+            "options": {
+                "legend": {
+                    "calcs": ["last", "max"],
+                    "displayMode": "table",
+                    "placement": "bottom"
+                },
+                "tooltip": { "mode": "multi", "sort": "none" }
+            },
+            "title": "Model Metrics Over Time (retrain history)",
+            "type": "timeseries",
+            "targets": [
+                {
+                    "expr": "model_val_accuracy{job=\"data-service\"} or vector(83.73)",
+                    "legendFormat": "Val Accuracy",
+                    "refId": "A"
+                },
+                {
+                    "expr": "model_val_precision{job=\"data-service\"} or vector(91.71)",
+                    "legendFormat": "Precision",
+                    "refId": "B"
+                },
+                {
+                    "expr": "model_val_recall{job=\"data-service\"} or vector(78.26)",
+                    "legendFormat": "Recall",
+                    "refId": "C"
+                }
+            ]
+        },
+
+        {
+            "collapsed": false,
+            "gridPos": { "h": 1, "w": 24, "x": 0, "y": 67 },
+            "id": 5000,
+            "title": "🔬 Filter Rejection Rates",
+            "type": "row"
+        },
+
+        {
+            "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+            "description": "How often each individual filter rejects a breakout. High rejection rate on a single filter may indicate misconfiguration or an edge-case instrument behavior.",
+            "fieldConfig": {
+                "defaults": {
+                    "color": { "mode": "palette-classic" },
+                    "custom": {
+                        "axisBorderShow": false,
+                        "axisCenteredZero": false,
+                        "drawStyle": "bars",
+                        "fillOpacity": 70,
+                        "lineWidth": 0,
+                        "stacking": { "group": "A", "mode": "none" }
+                    },
+                    "unit": "none"
+                },
+                "overrides": []
+            },
+            "gridPos": { "h": 9, "w": 12, "x": 0, "y": 68 },
+            "id": 5001,
+            "options": {
+                "legend": {
+                    "calcs": ["sum"],
+                    "displayMode": "list",
+                    "placement": "bottom"
+                },
+                "tooltip": { "mode": "multi", "sort": "desc" }
+            },
+            "title": "ORB Filter Outcomes (passed / rejected / error / no-trade)",
+            "type": "timeseries",
+            "targets": [
+                {
+                    "expr": "increase(orb_filter_results_total{job=\"data-service\",result=\"rejected\"}[1h]) or vector(0)",
+                    "legendFormat": "Filter Rejected",
+                    "refId": "A"
+                },
+                {
+                    "expr": "increase(orb_filter_results_total{job=\"data-service\",result=\"passed\"}[1h]) or vector(0)",
+                    "legendFormat": "Filter Passed",
+                    "refId": "B"
+                },
+                {
+                    "expr": "increase(orb_filter_results_total{job=\"data-service\",result=\"error\"}[1h]) or vector(0)",
+                    "legendFormat": "Filter Error",
+                    "refId": "C"
+                },
+                {
+                    "expr": "increase(no_trade_alerts_total{job=\"data-service\"}[1h]) or vector(0)",
+                    "legendFormat": "No-Trade Alerts",
+                    "refId": "D"
+                }
+            ]
+        },
+
+        {
+            "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+            "description": "Rejection rate per symbol. If one symbol is consistently filtered out (>80%), consider removing it from the focus list for this week.",
+            "fieldConfig": {
+                "defaults": {
+                    "color": { "mode": "palette-classic" },
+                    "custom": {
+                        "axisBorderShow": false,
+                        "axisCenteredZero": false,
+                        "drawStyle": "line",
+                        "fillOpacity": 10,
+                        "lineWidth": 2,
+                        "pointSize": 4,
+                        "showPoints": "auto",
+                        "stacking": { "group": "A", "mode": "none" }
+                    },
+                    "unit": "percentunit",
+                    "min": 0,
+                    "max": 1
+                },
+                "overrides": []
+            },
+            "gridPos": { "h": 9, "w": 12, "x": 12, "y": 68 },
+            "id": 5002,
+            "options": {
+                "legend": {
+                    "calcs": ["mean", "last"],
+                    "displayMode": "table",
+                    "placement": "bottom"
+                },
+                "tooltip": { "mode": "multi", "sort": "desc" }
+            },
+            "title": "Focus Quality by Symbol (proxy for filter rejection risk)",
+            "type": "timeseries",
+            "targets": [
+                {
+                    "expr": "focus_quality_gauge{job=\"data-service\",symbol=\"MGC\"} or vector(0)",
+                    "legendFormat": "MGC quality",
+                    "refId": "A"
+                },
+                {
+                    "expr": "focus_quality_gauge{job=\"data-service\",symbol=\"MES\"} or vector(0)",
+                    "legendFormat": "MES quality",
+                    "refId": "B"
+                },
+                {
+                    "expr": "focus_quality_gauge{job=\"data-service\",symbol=\"MNQ\"} or vector(0)",
+                    "legendFormat": "MNQ quality",
+                    "refId": "C"
+                },
+                {
+                    "expr": "focus_quality_gauge{job=\"data-service\",symbol=\"6E\"} or vector(0)",
+                    "legendFormat": "6E quality",
+                    "refId": "D"
+                },
+                {
+                    "expr": "focus_quality_gauge{job=\"data-service\",symbol=\"MBT\"} or vector(0)",
+                    "legendFormat": "MBT quality",
+                    "refId": "E"
+                }
+            ]
+        },
+
+        {
+            "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+            "description": "Focus quality score per asset symbol. Higher is better. Drives ORB priority — only assets above threshold are checked for breakouts.",
+            "fieldConfig": {
+                "defaults": {
+                    "color": { "mode": "palette-classic" },
+                    "custom": {
+                        "axisBorderShow": false,
+                        "axisCenteredZero": false,
+                        "axisLabel": "Quality",
+                        "drawStyle": "line",
+                        "fillOpacity": 10,
+                        "lineInterpolation": "smooth",
+                        "lineWidth": 2,
+                        "pointSize": 5,
+                        "showPoints": "auto",
+                        "stacking": { "group": "A", "mode": "none" }
+                    },
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            { "color": "red", "value": null },
+                            { "color": "yellow", "value": 50 },
+                            { "color": "green", "value": 70 }
+                        ]
+                    },
+                    "unit": "none",
+                    "min": 0,
+                    "max": 100
+                },
+                "overrides": []
+            },
+            "gridPos": { "h": 8, "w": 24, "x": 0, "y": 77 },
+            "id": 5010,
+            "options": {
+                "legend": {
+                    "calcs": ["last", "mean"],
+                    "displayMode": "table",
+                    "placement": "bottom"
+                },
+                "tooltip": { "mode": "multi", "sort": "desc" }
+            },
+            "title": "Focus Quality Score by Asset",
+            "type": "timeseries",
+            "targets": [
+                {
+                    "expr": "focus_quality_gauge{job=\"data-service\",symbol=\"MGC\"}",
+                    "legendFormat": "MGC",
+                    "refId": "A"
+                },
+                {
+                    "expr": "focus_quality_gauge{job=\"data-service\",symbol=\"MES\"}",
+                    "legendFormat": "MES",
+                    "refId": "B"
+                },
+                {
+                    "expr": "focus_quality_gauge{job=\"data-service\",symbol=\"MNQ\"}",
+                    "legendFormat": "MNQ",
+                    "refId": "C"
+                },
+                {
+                    "expr": "focus_quality_gauge{job=\"data-service\",symbol=\"6E\"}",
+                    "legendFormat": "6E",
+                    "refId": "D"
+                },
+                {
+                    "expr": "focus_quality_gauge{job=\"data-service\",symbol=\"MBT\"}",
+                    "legendFormat": "MBT",
+                    "refId": "E"
+                }
+            ]
+        }
+    ],
+
+    "refresh": "30s",
+    "schemaVersion": 39,
+    "tags": ["futures", "trading", "orb", "cnn", "paper"],
+    "templating": {
+        "list": [
+            {
+                "current": {
+                    "selected": false,
+                    "text": "Prometheus",
+                    "value": "prometheus"
+                },
+                "hide": 0,
+                "includeAll": false,
+                "label": "Datasource",
+                "multi": false,
+                "name": "DS_PROMETHEUS",
+                "options": [],
+                "query": "prometheus",
+                "queryValue": "",
+                "refresh": 1,
+                "regex": "",
+                "skipUrlSync": false,
+                "type": "datasource"
+            }
+        ]
+    },
+    "time": { "from": "now-6h", "to": "now" },
+    "timepicker": {
+        "refresh_intervals": ["5s", "10s", "30s", "1m", "5m", "15m"],
+        "time_options": ["5m", "15m", "1h", "6h", "12h", "24h", "2d", "7d"]
+    },
+    "timezone": "browser",
+    "title": "ORB CNN Paper Trading",
+    "uid": "orb-cnn-paper-trading",
+    "version": 1
+}

@@ -1,0 +1,1048 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+        <title>💬 RustAssistant Chat — Ruby Futures</title>
+        <link
+            rel="icon"
+            href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💬</text></svg>"
+        />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link
+            href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Syne:wght@400;600;700;800&display=swap"
+            rel="stylesheet"
+        />
+        <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+        <style>
+            :root {
+                --bg: #0a0a0f;
+                --card: #12121a;
+                --card2: #181824;
+                --border: #1e1e2e;
+                --bl: #2a2a3e;
+                --accent: #00d4ff;
+                --abg: rgba(0, 212, 255, 0.08);
+                --ab: rgba(0, 212, 255, 0.25);
+                --green: #00e676;
+                --gbg: rgba(0, 230, 118, 0.08);
+                --red: #ff4560;
+                --rbg: rgba(255, 69, 96, 0.08);
+                --amber: #ffb020;
+                --ambg: rgba(255, 176, 32, 0.08);
+                --purple: #a78bfa;
+                --blue: #3b9eff;
+                --text: #e0e0e0;
+                --dim: #6b7394;
+                --muted: #3a3f55;
+                --ubub: #1a3a5c;
+                --ubord: #264a72;
+                --abub: #1a1a2e;
+                --abord: #2a2a3e;
+                --mono: "JetBrains Mono", monospace;
+                --head: "Syne", sans-serif;
+            }
+            *,
+            *::before,
+            *::after {
+                box-sizing: border-box;
+                margin: 0;
+                padding: 0;
+            }
+            html,
+            body {
+                height: 100%;
+                background: var(--bg);
+                color: var(--text);
+                font-family: var(--mono);
+                font-size: 13px;
+            }
+            ::-webkit-scrollbar {
+                width: 6px;
+                height: 6px;
+            }
+            ::-webkit-scrollbar-track {
+                background: transparent;
+            }
+            ::-webkit-scrollbar-thumb {
+                background: var(--bl);
+                border-radius: 3px;
+            }
+            #app {
+                display: flex;
+                flex-direction: column;
+                height: 100vh;
+            }
+            #topbar {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                padding: 0 16px;
+                height: 48px;
+                background: var(--card);
+                border-bottom: 1px solid var(--border);
+                flex-shrink: 0;
+            }
+            .logo {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                text-decoration: none;
+                color: var(--text);
+                font-family: var(--head);
+                font-weight: 800;
+                font-size: 16px;
+            }
+            .logo-dot {
+                width: 10px;
+                height: 10px;
+                border-radius: 50%;
+                background: var(--accent);
+                box-shadow: 0 0 8px var(--accent);
+            }
+            .nav-links {
+                display: flex;
+                gap: 2px;
+                margin-left: 16px;
+                flex-wrap: wrap;
+            }
+            .nav-link {
+                color: var(--dim);
+                text-decoration: none;
+                font-size: 11px;
+                padding: 6px 8px;
+                border-radius: 6px;
+                transition: all 0.15s;
+                white-space: nowrap;
+            }
+            .nav-link:hover {
+                color: var(--text);
+                background: var(--abg);
+            }
+            .nav-link.active {
+                color: var(--accent);
+                background: var(--abg);
+            }
+            .nav-right {
+                margin-left: auto;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            }
+            .provider-badge {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                background: var(--card2);
+                padding: 4px 10px;
+                border-radius: 12px;
+                font-size: 10px;
+            }
+            .sdot {
+                width: 7px;
+                height: 7px;
+                border-radius: 50%;
+                background: #555;
+            }
+            .sdot.ok {
+                background: var(--green);
+                box-shadow: 0 0 6px var(--green);
+            }
+            .sdot.warn {
+                background: var(--amber);
+            }
+            .sdot.off {
+                background: var(--red);
+            }
+            #main {
+                flex: 1;
+                display: flex;
+                overflow: hidden;
+            }
+            #chat-col {
+                flex: 1;
+                display: flex;
+                flex-direction: column;
+                min-width: 0;
+            }
+            #ctx-strip {
+                display: flex;
+                gap: 8px;
+                padding: 8px 16px;
+                background: var(--card);
+                border-bottom: 1px solid var(--border);
+                overflow-x: auto;
+                flex-shrink: 0;
+            }
+            .ctx-item {
+                background: var(--card2);
+                padding: 5px 10px;
+                border-radius: 8px;
+                font-size: 10px;
+                display: flex;
+                flex-direction: column;
+                gap: 2px;
+                min-width: 80px;
+            }
+            .ctx-item .cl {
+                color: var(--dim);
+                font-size: 9px;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+            }
+            .ctx-item .cv {
+                color: var(--text);
+                font-weight: 600;
+            }
+            #messages {
+                flex: 1;
+                overflow-y: auto;
+                padding: 16px;
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+            }
+            .msg {
+                max-width: 75%;
+                padding: 10px 14px;
+                border-radius: 12px;
+                font-size: 12.5px;
+                line-height: 1.6;
+                word-wrap: break-word;
+            }
+            .msg-user {
+                align-self: flex-end;
+                background: var(--ubub);
+                border: 1px solid var(--ubord);
+                border-bottom-right-radius: 4px;
+            }
+            .msg-assistant {
+                align-self: flex-start;
+                background: var(--abub);
+                border: 1px solid var(--abord);
+                border-bottom-left-radius: 4px;
+            }
+            .msg-meta {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                margin-bottom: 4px;
+                font-size: 9px;
+                color: var(--dim);
+            }
+            .msg-role {
+                font-weight: 700;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+            }
+            .msg-user .msg-role {
+                color: var(--blue);
+            }
+            .msg-assistant .msg-role {
+                color: var(--accent);
+            }
+            .msg-task {
+                display: inline-block;
+                background: var(--ambg);
+                color: var(--amber);
+                font-size: 9px;
+                padding: 2px 6px;
+                border-radius: 4px;
+                margin-left: 4px;
+            }
+            .msg pre {
+                background: var(--bg);
+                padding: 8px 10px;
+                border-radius: 6px;
+                overflow-x: auto;
+                margin: 6px 0;
+                font-size: 11px;
+            }
+            .msg code {
+                background: var(--bg);
+                padding: 1px 4px;
+                border-radius: 3px;
+                font-size: 11.5px;
+            }
+            .msg-streaming::after {
+                content: "▊";
+                animation: blink 0.6s infinite;
+                color: var(--accent);
+            }
+            @keyframes blink {
+                0%,
+                100% {
+                    opacity: 1;
+                }
+                50% {
+                    opacity: 0;
+                }
+            }
+            #welcome {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                flex: 1;
+                gap: 12px;
+                text-align: center;
+                padding: 32px;
+            }
+            #welcome h2 {
+                font-family: var(--head);
+                font-size: 22px;
+                color: var(--text);
+            }
+            #welcome p {
+                color: var(--dim);
+                font-size: 12px;
+                max-width: 450px;
+                line-height: 1.6;
+            }
+            .qp {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 8px;
+                justify-content: center;
+                margin-top: 8px;
+            }
+            .qb {
+                background: var(--card2);
+                border: 1px solid var(--border);
+                padding: 8px 14px;
+                border-radius: 8px;
+                color: var(--text);
+                font-family: var(--mono);
+                font-size: 11px;
+                cursor: pointer;
+                transition: all 0.15s;
+            }
+            .qb:hover {
+                border-color: var(--accent);
+                color: var(--accent);
+                background: var(--abg);
+            }
+            #input-area {
+                padding: 12px 16px;
+                background: var(--card);
+                border-top: 1px solid var(--border);
+                flex-shrink: 0;
+            }
+            .input-row {
+                display: flex;
+                gap: 8px;
+                align-items: flex-end;
+            }
+            #msg-input {
+                flex: 1;
+                background: var(--card2);
+                border: 1px solid var(--border);
+                color: var(--text);
+                font-family: var(--mono);
+                font-size: 12.5px;
+                padding: 10px 12px;
+                border-radius: 10px;
+                resize: none;
+                min-height: 42px;
+                max-height: 160px;
+                line-height: 1.5;
+                outline: none;
+                transition: border-color 0.15s;
+            }
+            #msg-input:focus {
+                border-color: var(--accent);
+            }
+            #msg-input::placeholder {
+                color: var(--muted);
+            }
+            #send-btn {
+                background: var(--accent);
+                color: var(--bg);
+                border: none;
+                border-radius: 10px;
+                padding: 10px 18px;
+                font-family: var(--mono);
+                font-weight: 700;
+                font-size: 12px;
+                cursor: pointer;
+                transition: all 0.15s;
+                white-space: nowrap;
+            }
+            #send-btn:hover {
+                filter: brightness(1.15);
+                box-shadow: 0 0 12px rgba(0, 212, 255, 0.3);
+            }
+            #send-btn:disabled {
+                opacity: 0.4;
+                cursor: not-allowed;
+            }
+            .input-hint {
+                display: flex;
+                justify-content: space-between;
+                margin-top: 6px;
+                font-size: 9px;
+                color: var(--muted);
+            }
+            .input-hint kbd {
+                background: var(--bg);
+                padding: 1px 5px;
+                border-radius: 3px;
+                font-size: 9px;
+            }
+            #sidebar {
+                width: 240px;
+                background: var(--card);
+                border-left: 1px solid var(--border);
+                overflow-y: auto;
+                flex-shrink: 0;
+                padding: 12px;
+            }
+            .sb-sec {
+                margin-bottom: 16px;
+            }
+            .sb-t {
+                font-family: var(--head);
+                font-size: 10px;
+                color: var(--dim);
+                text-transform: uppercase;
+                letter-spacing: 1px;
+                margin-bottom: 8px;
+                padding-bottom: 4px;
+                border-bottom: 1px solid var(--border);
+            }
+            .sb-i {
+                display: flex;
+                justify-content: space-between;
+                padding: 3px 0;
+                font-size: 11px;
+            }
+            .sb-v {
+                text-align: right;
+            }
+            .sb-v.green {
+                color: var(--green);
+            }
+            .sb-v.red {
+                color: var(--red);
+            }
+            .sb-v.accent {
+                color: var(--accent);
+            }
+            .sb-h {
+                display: block;
+                padding: 6px 8px;
+                background: var(--card2);
+                border: 1px solid var(--border);
+                border-radius: 6px;
+                margin-bottom: 4px;
+                font-size: 10px;
+                color: var(--dim);
+                cursor: pointer;
+                text-decoration: none;
+                transition: all 0.15s;
+                text-align: left;
+                width: 100%;
+                font-family: var(--mono);
+            }
+            .sb-h:hover {
+                border-color: var(--accent);
+                color: var(--text);
+            }
+            .sb-btn {
+                display: block;
+                width: 100%;
+                padding: 7px;
+                background: var(--abg);
+                border: 1px solid var(--ab);
+                color: var(--accent);
+                border-radius: 6px;
+                font-family: var(--mono);
+                font-size: 10px;
+                cursor: pointer;
+                transition: all 0.15s;
+                margin-top: 6px;
+                text-align: center;
+            }
+            .sb-btn:hover {
+                background: var(--accent);
+                color: var(--bg);
+            }
+            @media (max-width: 900px) {
+                #main {
+                    flex-direction: column;
+                }
+                #sidebar {
+                    width: 100%;
+                    max-height: 200px;
+                    border-left: none;
+                    border-top: 1px solid var(--border);
+                }
+            }
+            @media (max-width: 600px) {
+                .nav-links {
+                    display: none;
+                }
+                .nav-link {
+                    font-size: 10px;
+                    padding: 4px 5px;
+                }
+                #ctx-strip {
+                    display: none;
+                }
+            }
+        </style>
+    </head>
+    <body>
+        <div id="app">
+            <header id="topbar">
+                <a href="/" class="logo"
+                    ><div class="logo-dot"></div>
+                    <span>RUBY</span></a
+                >
+                <nav class="nav-links">
+                    <a href="/" class="nav-link">📈 Dashboard</a>
+                    <a href="/signals" class="nav-link">📡 Signals</a>
+                    <a href="/trading" class="nav-link">🚀 Trading</a>
+                    <a href="/settings" class="nav-link">🔧 Settings</a>
+                    <a href="/trainer" class="nav-link">🎓 Trainer</a>
+                    <a href="/pine" class="nav-link">🌲 Pine</a>
+                    <a href="/chat" class="nav-link active">💬 Chat</a>
+                    <a href="/dom" class="nav-link">📊 DOM</a>
+                    <a href="/journal" class="nav-link">📓 Journal</a>
+                </nav>
+                <div class="nav-right">
+                    <div class="provider-badge" id="provider-badge">
+                        <span class="sdot off" id="provider-dot"></span>
+                        <span id="provider-label">CHECKING…</span>
+                    </div>
+                </div>
+            </header>
+            <div id="main">
+                <div id="chat-col">
+                    <div id="ctx-strip">
+                        <div class="ctx-item">
+                            <span class="cl">Symbol</span
+                            ><span class="cv" id="ctx-sym">MES</span>
+                        </div>
+                        <div class="ctx-item">
+                            <span class="cl">Bias</span
+                            ><span class="cv" id="ctx-bias">—</span>
+                        </div>
+                        <div class="ctx-item">
+                            <span class="cl">Regime</span
+                            ><span class="cv" id="ctx-regime">—</span>
+                        </div>
+                        <div class="ctx-item">
+                            <span class="cl">Session P&L</span
+                            ><span class="cv" id="ctx-pnl">$0.00</span>
+                        </div>
+                        <div class="ctx-item">
+                            <span class="cl">Last Signal</span
+                            ><span class="cv" id="ctx-signal">—</span>
+                        </div>
+                    </div>
+                    <div id="messages">
+                        <div id="welcome">
+                            <h2>💬 RustAssistant</h2>
+                            <p>
+                                AI-powered trading assistant with context from
+                                your pipeline, signals, and market data. Ask
+                                about setups, review trades, or create tasks.
+                            </p>
+                            <div class="qp">
+                                <button
+                                    class="qb"
+                                    onclick="
+                                        sendQuick(
+                                            'What is the current market regime for MES?',
+                                        )
+                                    "
+                                >
+                                    📊 Market regime?
+                                </button>
+                                <button
+                                    class="qb"
+                                    onclick="
+                                        sendQuick(
+                                            'Analyze my last 5 trades and find patterns',
+                                        )
+                                    "
+                                >
+                                    📈 Trade patterns
+                                </button>
+                                <button
+                                    class="qb"
+                                    onclick="
+                                        sendQuick(
+                                            'What key levels should I watch today?',
+                                        )
+                                    "
+                                >
+                                    🎯 Key levels
+                                </button>
+                                <button
+                                    class="qb"
+                                    onclick="
+                                        sendQuick(
+                                            'create task: Review overnight session for MES',
+                                        )
+                                    "
+                                >
+                                    📋 Create task
+                                </button>
+                                <button
+                                    class="qb"
+                                    onclick="
+                                        sendQuick(
+                                            'Explain the current signal confluence',
+                                        )
+                                    "
+                                >
+                                    🔍 Signal confluence
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="input-area">
+                        <div class="input-row">
+                            <textarea
+                                id="msg-input"
+                                placeholder="Ask about markets, trades, signals… prefix with 'create task:' for tasks"
+                                rows="1"
+                            ></textarea>
+                            <button id="send-btn" onclick="sendMessage()">
+                                Send ⏎
+                            </button>
+                        </div>
+                        <div class="input-hint">
+                            <span
+                                ><kbd>Ctrl</kbd>+<kbd>Enter</kbd> to send</span
+                            >
+                            <span id="char-count"></span>
+                        </div>
+                    </div>
+                </div>
+                <aside id="sidebar">
+                    <div class="sb-sec">
+                        <div class="sb-t">Session Info</div>
+                        <div class="sb-i">
+                            <span>Provider</span
+                            ><span class="sb-v accent" id="sb-provider">—</span>
+                        </div>
+                        <div class="sb-i">
+                            <span>Model</span
+                            ><span class="sb-v" id="sb-model">—</span>
+                        </div>
+                        <div class="sb-i">
+                            <span>Messages</span
+                            ><span class="sb-v" id="sb-count">0</span>
+                        </div>
+                    </div>
+                    <div class="sb-sec">
+                        <div class="sb-t">Context</div>
+                        <div class="sb-i">
+                            <span>Symbol</span
+                            ><span class="sb-v accent" id="sb-sym">MES</span>
+                        </div>
+                        <div class="sb-i">
+                            <span>Bias</span
+                            ><span class="sb-v" id="sb-bias">—</span>
+                        </div>
+                        <div class="sb-i">
+                            <span>Regime</span
+                            ><span class="sb-v" id="sb-regime">—</span>
+                        </div>
+                        <div class="sb-i">
+                            <span>Signals</span
+                            ><span class="sb-v" id="sb-signals">0</span>
+                        </div>
+                    </div>
+                    <div class="sb-sec">
+                        <div class="sb-t">Conversations</div>
+                        <div id="convo-list"></div>
+                        <button class="sb-btn" onclick="clearChat()">
+                            ✦ New Chat
+                        </button>
+                    </div>
+                    <div class="sb-sec">
+                        <div class="sb-t">Tasks Created</div>
+                        <div id="task-list">
+                            <div
+                                style="
+                                    font-size: 10px;
+                                    color: var(--muted);
+                                    padding: 4px;
+                                "
+                            >
+                                No tasks yet
+                            </div>
+                        </div>
+                    </div>
+                </aside>
+            </div>
+        </div>
+        <script>
+            // ─── State ───
+            let messages = [],
+                streaming = false,
+                sseSource = null,
+                currentStreamEl = null;
+            const API = {
+                send: "/api/chat",
+                history: "/api/chat/history",
+                status: "/api/chat/status",
+                sse: "/sse/chat",
+                context: "/api/market/context",
+                tasks: "/api/tasks",
+            };
+
+            document.addEventListener("DOMContentLoaded", () => {
+                loadHistory();
+                loadProviderStatus();
+                loadMarketContext();
+                setupInput();
+                setInterval(loadProviderStatus, 30000);
+                // TODO: poll or SSE for market context updates
+                // TODO: persist session_id across page reloads (localStorage)
+            });
+
+            function setupInput() {
+                const inp = document.getElementById("msg-input");
+                inp.addEventListener("input", () => {
+                    inp.style.height = "auto";
+                    inp.style.height = Math.min(inp.scrollHeight, 160) + "px";
+                    document.getElementById("char-count").textContent =
+                        inp.value.length > 0 ? inp.value.length + " chars" : "";
+                });
+                inp.addEventListener("keydown", (e) => {
+                    if (e.ctrlKey && e.key === "Enter") {
+                        e.preventDefault();
+                        sendMessage();
+                    }
+                });
+            }
+
+            async function sendMessage() {
+                const inp = document.getElementById("msg-input"),
+                    text = inp.value.trim();
+                if (!text || streaming) return;
+                const wel = document.getElementById("welcome");
+                if (wel) wel.remove();
+
+                const isTask = text.toLowerCase().startsWith("create task:");
+
+                appendMsg("user", text);
+                inp.value = "";
+                inp.style.height = "auto";
+                document.getElementById("char-count").textContent = "";
+
+                if (isTask) {
+                    const taskText = text.replace(/^create task:\s*/i, "");
+                    try {
+                        const resp = await fetch(API.tasks, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                                title: taskText,
+                                source: "chat",
+                            }),
+                        });
+                        const data = await resp.json();
+                        appendMsg(
+                            "assistant",
+                            '✅ Task created: "' +
+                                taskText +
+                                '"' +
+                                (data.id ? " (ID: " + data.id + ")" : ""),
+                            { isTask: true },
+                        );
+                        addTask(taskText);
+                    } catch (e) {
+                        appendMsg(
+                            "assistant",
+                            '📋 Task queued locally: "' +
+                                taskText +
+                                '" (backend unavailable)',
+                            { isTask: true },
+                        );
+                        addTask(taskText);
+                    }
+                    return;
+                }
+
+                try {
+                    const resp = await fetch(API.send, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            message: text,
+                            session_id: "web",
+                            context: getCtxPayload(),
+                        }),
+                    });
+                    if (resp.ok) {
+                        const data = await resp.json();
+                        if (data.streaming) {
+                            startSSE(data.stream_id || "web");
+                        } else {
+                            appendMsg(
+                                "assistant",
+                                data.response ||
+                                    data.message ||
+                                    "(no response)",
+                            );
+                        }
+                    } else {
+                        appendMsg(
+                            "assistant",
+                            "⚠️ Error: " + resp.status + " " + resp.statusText,
+                        );
+                    }
+                } catch (e) {
+                    appendMsg(
+                        "assistant",
+                        "⚠️ Could not reach backend. Mock response:\n\nBased on current MES context, the market is showing consolidation near key support. Consider waiting for a clear break before entering.",
+                    );
+                }
+                updateMsgCount();
+            }
+
+            function startSSE(streamId) {
+                streaming = true;
+                const el = appendMsg("assistant", "", { streaming: true });
+                currentStreamEl = el.querySelector(".msg-body");
+                const url = API.sse + "?session_id=" + (streamId || "web");
+                let full = "";
+                sseSource = new EventSource(url);
+                sseSource.addEventListener("chunk", (e) => {
+                    const d = JSON.parse(e.data);
+                    full += d.text || d.content || d.chunk || "";
+                    currentStreamEl.innerHTML = renderMd(full);
+                    scrollBot();
+                });
+                sseSource.addEventListener("done", (e) => {
+                    finishSSE(full);
+                });
+                sseSource.addEventListener("error", () => {
+                    if (streaming) {
+                        full += full ? "" : " (stream ended)";
+                        finishSSE(full);
+                    }
+                });
+                sseSource.onerror = () => {
+                    if (streaming) finishSSE(full || "(connection lost)");
+                };
+            }
+
+            function finishSSE(text) {
+                streaming = false;
+                if (sseSource) {
+                    sseSource.close();
+                    sseSource = null;
+                }
+                if (currentStreamEl) {
+                    currentStreamEl.parentElement.classList.remove(
+                        "msg-streaming",
+                    );
+                    if (text) currentStreamEl.innerHTML = renderMd(text);
+                }
+                currentStreamEl = null;
+                updateMsgCount();
+            }
+
+            function appendMsg(role, content, opts = {}) {
+                const c = document.getElementById("messages");
+                const el = document.createElement("div");
+                el.className =
+                    "msg msg-" +
+                    role +
+                    (opts.streaming ? " msg-streaming" : "");
+                const time = new Date().toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                });
+                let badges = "";
+                if (opts.isTask)
+                    badges = '<span class="msg-task">📋 TASK</span>';
+                el.innerHTML = `<div class="msg-meta"><span class="msg-role">${role}</span>${badges}<span>${time}</span></div><div class="msg-body">${renderMd(content)}</div>`;
+                c.appendChild(el);
+                messages.push({ role, content, ts: Date.now() });
+                scrollBot();
+                return el;
+            }
+
+            function sendQuick(text) {
+                document.getElementById("msg-input").value = text;
+                sendMessage();
+            }
+
+            async function loadHistory() {
+                try {
+                    const r = await fetch(API.history + "?session_id=web");
+                    if (!r.ok) return;
+                    const d = await r.json();
+                    const w = document.getElementById("welcome");
+                    if (d.messages && d.messages.length > 0) {
+                        if (w) w.remove();
+                        d.messages.forEach((m) => appendMsg(m.role, m.content));
+                    }
+                    if (d.conversations) renderConvos(d.conversations);
+                } catch (e) {
+                    /* backend offline — show welcome */
+                }
+            }
+
+            function renderConvos(list) {
+                const el = document.getElementById("convo-list");
+                if (!list || !list.length) {
+                    el.innerHTML =
+                        '<div style="font-size:10px;color:var(--muted);padding:4px">No history</div>';
+                    return;
+                }
+                el.innerHTML = "";
+                list.slice(0, 8).forEach((c) => {
+                    const btn = document.createElement("button");
+                    btn.className = "sb-h";
+                    btn.textContent = (c.title || c.id || "Chat").substring(
+                        0,
+                        30,
+                    );
+                    btn.onclick = () => loadConvo(c.id);
+                    el.appendChild(btn);
+                });
+            }
+
+            function loadConvo(id) {
+                // TODO: load specific conversation by ID
+                console.log("Load conversation:", id);
+            }
+
+            async function loadProviderStatus() {
+                try {
+                    const r = await fetch(API.status);
+                    if (!r.ok) return;
+                    const d = await r.json();
+                    const dot = document.getElementById("provider-dot");
+                    const lbl = document.getElementById("provider-label");
+                    const provider = d.provider || d.model || "unknown";
+                    lbl.textContent = provider.toUpperCase();
+                    dot.className =
+                        "sdot " +
+                        (d.available || d.ok
+                            ? "ok"
+                            : d.degraded
+                              ? "warn"
+                              : "off");
+                    document.getElementById("sb-provider").textContent =
+                        provider;
+                    document.getElementById("sb-model").textContent =
+                        d.model || provider;
+                } catch (e) {
+                    document.getElementById("provider-label").textContent =
+                        "OFFLINE";
+                    document.getElementById("provider-dot").className =
+                        "sdot off";
+                    document.getElementById("sb-provider").textContent =
+                        "offline";
+                }
+            }
+
+            async function loadMarketContext() {
+                try {
+                    const r = await fetch(API.context);
+                    if (!r.ok) return;
+                    const d = await r.json();
+                    if (d.symbol)
+                        document.getElementById("ctx-sym").textContent =
+                            d.symbol;
+                    if (d.bias)
+                        document.getElementById("ctx-bias").textContent =
+                            d.bias;
+                    if (d.regime)
+                        document.getElementById("ctx-regime").textContent =
+                            d.regime;
+                    if (d.session_pnl != null)
+                        document.getElementById("ctx-pnl").textContent =
+                            "$" + d.session_pnl.toFixed(2);
+                    if (d.last_signal)
+                        document.getElementById("ctx-signal").textContent =
+                            d.last_signal;
+                    document.getElementById("sb-sym").textContent =
+                        d.symbol || "MES";
+                    document.getElementById("sb-bias").textContent =
+                        d.bias || "—";
+                    document.getElementById("sb-regime").textContent =
+                        d.regime || "—";
+                    document.getElementById("sb-signals").textContent =
+                        d.signal_count || "0";
+                } catch (e) {
+                    /* use defaults */
+                }
+            }
+
+            function getCtxPayload() {
+                return {
+                    symbol: document.getElementById("ctx-sym").textContent,
+                    bias: document.getElementById("ctx-bias").textContent,
+                    regime: document.getElementById("ctx-regime").textContent,
+                };
+            }
+
+            function addTask(text) {
+                const el = document.getElementById("task-list");
+                if (el.querySelector("[style]")) el.innerHTML = "";
+                const d = document.createElement("div");
+                d.className = "sb-h";
+                d.textContent = "📋 " + text.substring(0, 28);
+                d.style.cursor = "default";
+                el.prepend(d);
+            }
+
+            function clearChat() {
+                messages = [];
+                const c = document.getElementById("messages");
+                c.innerHTML = `<div id="welcome"><h2>💬 RustAssistant</h2><p>Start a new conversation.</p><div class="qp"><button class="qb" onclick="sendQuick('What is the current market regime?')">📊 Market regime?</button><button class="qb" onclick="sendQuick('Analyze my last trades')">📈 Trade review</button></div></div>`;
+                updateMsgCount();
+            }
+
+            function updateMsgCount() {
+                document.getElementById("sb-count").textContent =
+                    messages.length;
+            }
+
+            function scrollBot() {
+                const e = document.getElementById("messages");
+                e.scrollTop = e.scrollHeight;
+            }
+
+            function esc(s) {
+                const d = document.createElement("div");
+                d.textContent = s;
+                return d.innerHTML;
+            }
+
+            function renderMd(text) {
+                if (!text) return "";
+                let h = esc(text);
+                h = h.replace(
+                    /```(\w*)\n([\s\S]*?)```/g,
+                    "<pre><code>$2</code></pre>",
+                );
+                h = h.replace(/`([^`]+)`/g, "<code>$1</code>");
+                h = h.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+                h = h.replace(/\*(.+?)\*/g, "<em>$1</em>");
+                h = h.replace(/\n/g, "<br>");
+                return h;
+            }
+
+            // TODO: Implement conversation branching / forking
+            // TODO: Add file/image upload support
+            // TODO: Add token usage tracking in sidebar
+            // TODO: Support multiple AI providers (switch via settings)
+            // TODO: Add message search/filter functionality
+            // TODO: Persist chat sessions to localStorage as fallback
+            // TODO: Add voice input support (Web Speech API)
+            // TODO: Export conversation as markdown
+        </script>
+    </body>
+</html>

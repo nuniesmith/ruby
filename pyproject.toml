@@ -1,0 +1,183 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "futures-lib"
+version = "0.1.0"
+description = "Ruby Futures — live dashboard, market stats & web UI for futures trading"
+requires-python = ">=3.13"
+readme = "README.md"
+
+dependencies = [
+    "apscheduler>=3.10.0",
+    # --- Data & Market ---
+    "massive>=2.4.0",
+    # async-rithmic requires websockets<15; cap here so all extras stay compatible
+    "websockets>=13.0,<15.0",
+    "yfinance>=1.2.0",
+
+    # --- Data Science ---
+    "pandas>=3.0.1",
+    "numpy>=2.4.3",
+    "scikit-learn>=1.8.0",
+    "hmmlearn>=0.3.3",
+
+    # --- Charting (dashboard visuals + CNN training images) ---
+    "plotly>=6.6.0",
+    "matplotlib>=3.10.8",
+    "mplfinance>=0.12.10b0",
+    "Pillow>=12.1.1",
+
+    # --- Backtesting & Optimization (live engine) ---
+    "backtesting>=0.6.5",
+    "optuna>=4.7.0",
+
+    # --- Web / API ---
+    "fastapi>=0.135.1",
+    "uvicorn>=0.41.0",
+    "jinja2>=3.1.6",
+    "python-multipart>=0.0.22",
+    "pydantic>=2.12.5",
+    "jsonschema>=4.23.0",
+    "requests>=2.32.5",
+    "httpx>=0.28.1",
+    "openai>=2.26.0",
+    "slowapi>=0.1.9",
+
+    # --- Storage ---
+    "redis>=7.3.0",
+    "psycopg[binary]>=3.3.3",
+    "psycopg2-binary>=2.9.7",
+    "psycopg_pool>=3.0.0",
+    "sqlalchemy>=2.0.48",
+
+    # --- Timezone data (required for ZoneInfo inside Docker/minimal OS images) ---
+    "tzdata>=2025.1",
+
+    # --- Observability ---
+    "loguru>=0.7.0",
+    "structlog>=25.5.0",
+    "prometheus-client>=0.24.1",
+    "psutil>=6.0.0",
+
+    # --- Filesystem watching (CNN model hot-reload) ---
+    "watchdog>=6.0.0",
+
+    # --- Reddit sentiment ---
+    "praw>=7.8.1",
+    # NOTE: package name on PyPI is "vaderSentiment" but imports as vaderSentiment
+    "vaderSentiment>=3.3.2",
+
+    # --- News sentiment (Finnhub) ---
+    "finnhub-python>=2.4.20",
+
+    # --- Credential encryption (Rithmic integration) ---
+    "cryptography>=46.0.5",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=9.0.2",
+    "pytest-cov>=7.0.0",
+    "pytest-timeout>=2.4.0",
+    "pytest-asyncio>=1.3.0",
+    "httpx>=0.28.1",
+    "ruff>=0.15.5",
+    "mypy>=1.19.1",
+    "types-requests>=2.32.4.20260107",
+    "types-PyYAML>=6.0.12",
+    "types-pytz>=2026.1.1.20260304",
+    "types-redis>=4.6.0.20241004",
+]
+gpu = [
+    # --- GPU training (CUDA 12.8) — trainer image only ---
+    "torch>=2.10.0",
+    "torchvision>=0.25.0",
+    "torchaudio>=2.10.0",
+    "tqdm>=4.67.3",
+]
+server = [
+    # --- Trainer HTTP server extras ---
+    "uvicorn[standard]>=0.41.0",
+]
+rithmic = [
+    # --- Rithmic prop account monitoring (read-only) ---
+    # async-rithmic 1.x requires websockets>=11,<15 — base deps already cap at <15.
+    # cryptography is already in base deps (>=42.0.0).
+    "async-rithmic>=1.5.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/lib"]
+
+[tool.pytest.ini_options]
+testpaths = ["src/tests"]
+pythonpath = ["src"]
+# -p no:faulthandler: suppresses the C-level abort/core-dump from
+# prometheus_client's _mmap_dict C extension during interpreter shutdown.
+# All tests pass cleanly — the crash only happens in the atexit/GC
+# teardown phase, causing a spurious non-zero exit without this flag.
+addopts = "-p no:faulthandler"
+
+[tool.ruff]
+src = ["src"]
+target-version = "py313"
+line-length = 120
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "SIM", # flake8-simplify
+    "TCH", # flake8-type-checking
+]
+ignore = [
+    "E501",  # line-too-long (handled by formatter)
+    "UP046", # Generic class uses Generic subclass instead of type parameters (pre-existing code)
+    "UP047", # Generic function should use type parameters (pre-existing code)
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["lib", "entrypoints"]
+
+[tool.mypy]
+python_version = "3.13"
+mypy_path = "src"
+files = ["src/lib", "src/entrypoints", "scripts"]
+
+# Error reporting — fail on real type errors
+ignore_missing_imports = true
+warn_unused_ignores = false
+warn_redundant_casts = true
+warn_return_any = false
+
+# Don't require full annotations everywhere, but check what is annotated
+check_untyped_defs = false
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+
+# Silence noise from unannotated third-party code
+follow_imports = "silent"
+
+# Per-module overrides — silence noisy third-party stubs
+[[tool.mypy.overrides]]
+module = [
+    "massive.*",
+    "async_rithmic.*",
+    "mplfinance.*",
+    "hmmlearn.*",
+    "backtesting.*",
+    "optuna.*",
+    "praw.*",
+    "vaderSentiment.*",
+    "finnhub.*",
+    "apscheduler.*",
+    "slowapi.*",
+]
+ignore_missing_imports = true
+ignore_errors = true

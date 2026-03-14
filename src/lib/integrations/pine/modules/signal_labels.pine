@@ -1,0 +1,124 @@
+// ── Module: signal_labels ───────────────────────────────────────────────────
+// Part of the Ruby indicator — assembled by PineScriptGenerator
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 14. SIGNAL SHAPES + LABELS  (Entry · SL · TP1 · TP2 · TP3)
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ── Full-filter confirmed signals — large triangle (trade-ready setup) ────────
+plotshape(longSignal,  "Long",  shape.triangleup,   location.belowbar, color.new(color.green, 0), size=size.large)
+plotshape(shortSignal, "Short", shape.triangledown, location.abovebar, color.new(color.red,   0), size=size.large)
+
+// ── Line-set trackers — cleared on each new signal to avoid clutter ───────────
+var array<line> l_sig_lines = array.new<line>()
+var array<line> s_sig_lines = array.new<line>()
+var array<line> l_bo_lines  = array.new<line>()
+var array<line> s_bo_lines  = array.new<line>()
+
+// ── Labels on every TG dot (strong_bot / strong_top) ─────────────────────────
+if showEntryLabels
+    if strong_bot
+        label.new(bar_index, low - atr14,
+             "LONG 📈" +
+             "\nEntry : " + str.tostring(l_entry, format.mintick) +
+             "\nSL    : " + str.tostring(l_sl,    format.mintick) +
+             "\nTP 1  : " + str.tostring(l_tp1,   format.mintick) + "  (" + str.tostring(tp1R, "#.#") + "R)" +
+             "\nTP 2  : " + str.tostring(l_tp2,   format.mintick) + "  (" + str.tostring(tp2R, "#.#") + "R)" +
+             "\nTP 3  : " + str.tostring(l_tp3,   format.mintick) + "  (" + str.tostring(tp3R, "#.#") + "R)" +
+             "\nQual  : " + str.tostring(math.round(quality)) + "%" +
+             "\nWave  : " + str.tostring(math.round(math.abs(cur_ratio), 2)) + "x" +
+             "\n"         + market_regime,
+             color=color.new(color.green, 20), style=label.style_label_up,
+             textcolor=color.white, size=size.normal)
+
+    if strong_top
+        label.new(bar_index, high + atr14,
+             "SHORT 📉" +
+             "\nEntry : " + str.tostring(s_entry, format.mintick) +
+             "\nSL    : " + str.tostring(s_sl,    format.mintick) +
+             "\nTP 1  : " + str.tostring(s_tp1,   format.mintick) + "  (" + str.tostring(tp1R, "#.#") + "R)" +
+             "\nTP 2  : " + str.tostring(s_tp2,   format.mintick) + "  (" + str.tostring(tp2R, "#.#") + "R)" +
+             "\nTP 3  : " + str.tostring(s_tp3,   format.mintick) + "  (" + str.tostring(tp3R, "#.#") + "R)" +
+             "\nQual  : " + str.tostring(math.round(quality)) + "%" +
+             "\nWave  : " + str.tostring(math.round(math.abs(cur_ratio), 2)) + "x" +
+             "\n"         + market_regime,
+             color=color.new(color.red, 20), style=label.style_label_down,
+             textcolor=color.white, size=size.normal)
+
+// ── TP / SL guide lines — cleared on next signal so chart stays clean ─────────
+if strong_bot
+    // Remove previous long signal lines
+    int _lsl_size = array.size(l_sig_lines)
+    if _lsl_size > 0
+        for _i = 0 to _lsl_size - 1
+            line.delete(array.get(l_sig_lines, _i))
+    array.clear(l_sig_lines)
+    array.push(l_sig_lines, line.new(bar_index, l_tp1, bar_index + 25, l_tp1, color=color.new(color.lime,  35), style=line.style_dashed))
+    array.push(l_sig_lines, line.new(bar_index, l_tp2, bar_index + 25, l_tp2, color=color.new(color.green, 35), style=line.style_dashed))
+    array.push(l_sig_lines, line.new(bar_index, l_tp3, bar_index + 25, l_tp3, color=color.new(color.teal,  35), style=line.style_dashed))
+    array.push(l_sig_lines, line.new(bar_index, l_sl,  bar_index + 25, l_sl,  color=color.new(color.red,   45), style=line.style_dashed))
+
+if strong_top
+    // Remove previous short signal lines
+    int _ssl_size = array.size(s_sig_lines)
+    if _ssl_size > 0
+        for _i = 0 to _ssl_size - 1
+            line.delete(array.get(s_sig_lines, _i))
+    array.clear(s_sig_lines)
+    array.push(s_sig_lines, line.new(bar_index, s_tp1, bar_index + 25, s_tp1, color=color.new(color.red,    35), style=line.style_dashed))
+    array.push(s_sig_lines, line.new(bar_index, s_tp2, bar_index + 25, s_tp2, color=color.new(color.orange, 35), style=line.style_dashed))
+    array.push(s_sig_lines, line.new(bar_index, s_tp3, bar_index + 25, s_tp3, color=color.new(color.maroon, 35), style=line.style_dashed))
+    array.push(s_sig_lines, line.new(bar_index, s_sl,  bar_index + 25, s_sl,  color=color.new(color.lime,   45), style=line.style_dashed))
+
+// ── Breakout entry labels — ORB or RB depending on session window ─────────────
+// Colours and size now match the main LONG / SHORT labels for easy reading.
+if showBreakoutLabels
+    if orbBreakUp
+        float _bo_sl   = rLow - atr14
+        float _bo_risk = close - _bo_sl
+        string _bo_tag = orbWindow ? "LONG ORB 🚀" : "LONG RB 🚀"
+        // Remove previous long breakout lines
+        int _lbl_size = array.size(l_bo_lines)
+        if _lbl_size > 0
+            for _i = 0 to _lbl_size - 1
+                line.delete(array.get(l_bo_lines, _i))
+        array.clear(l_bo_lines)
+        label.new(bar_index, low - atr14 * 1.8,
+             _bo_tag +
+             "\nEntry : " + str.tostring(close,                    format.mintick) +
+             "\nSL    : " + str.tostring(_bo_sl,                   format.mintick) +
+             "\nTP 1  : " + str.tostring(close + _bo_risk * tp1R,  format.mintick) + "  (" + str.tostring(tp1R, "#.#") + "R)" +
+             "\nTP 2  : " + str.tostring(close + _bo_risk * tp2R,  format.mintick) + "  (" + str.tostring(tp2R, "#.#") + "R)" +
+             "\nTP 3  : " + str.tostring(close + _bo_risk * tp3R,  format.mintick) + "  (" + str.tostring(tp3R, "#.#") + "R)" +
+             "\nQual  : " + str.tostring(math.round(quality)) + "%",
+             color=color.new(color.green, 20), style=label.style_label_up,
+             textcolor=color.white, size=size.normal)
+        array.push(l_bo_lines, line.new(bar_index, close + _bo_risk * tp1R, bar_index + 20, close + _bo_risk * tp1R, color=color.new(color.lime,  40), style=line.style_dashed))
+        array.push(l_bo_lines, line.new(bar_index, close + _bo_risk * tp2R, bar_index + 20, close + _bo_risk * tp2R, color=color.new(color.green, 40), style=line.style_dashed))
+        array.push(l_bo_lines, line.new(bar_index, close + _bo_risk * tp3R, bar_index + 20, close + _bo_risk * tp3R, color=color.new(color.teal,  40), style=line.style_dashed))
+        array.push(l_bo_lines, line.new(bar_index, _bo_sl,                  bar_index + 20, _bo_sl,                  color=color.new(color.red,   50), style=line.style_dashed))
+
+    if orbBreakDn
+        float _bo_sl   = rHigh + atr14
+        float _bo_risk = _bo_sl - close
+        string _bo_tag = orbWindow ? "SHORT ORB 📉" : "SHORT RB 📉"
+        // Remove previous short breakout lines
+        int _sbl_size = array.size(s_bo_lines)
+        if _sbl_size > 0
+            for _i = 0 to _sbl_size - 1
+                line.delete(array.get(s_bo_lines, _i))
+        array.clear(s_bo_lines)
+        label.new(bar_index, high + atr14 * 1.8,
+             _bo_tag +
+             "\nEntry : " + str.tostring(close,                    format.mintick) +
+             "\nSL    : " + str.tostring(_bo_sl,                   format.mintick) +
+             "\nTP 1  : " + str.tostring(close - _bo_risk * tp1R,  format.mintick) + "  (" + str.tostring(tp1R, "#.#") + "R)" +
+             "\nTP 2  : " + str.tostring(close - _bo_risk * tp2R,  format.mintick) + "  (" + str.tostring(tp2R, "#.#") + "R)" +
+             "\nTP 3  : " + str.tostring(close - _bo_risk * tp3R,  format.mintick) + "  (" + str.tostring(tp3R, "#.#") + "R)" +
+             "\nQual  : " + str.tostring(math.round(quality)) + "%",
+             color=color.new(color.red, 20), style=label.style_label_down,
+             textcolor=color.white, size=size.normal)
+        array.push(s_bo_lines, line.new(bar_index, close - _bo_risk * tp1R, bar_index + 20, close - _bo_risk * tp1R, color=color.new(color.red,    40), style=line.style_dashed))
+        array.push(s_bo_lines, line.new(bar_index, close - _bo_risk * tp2R, bar_index + 20, close - _bo_risk * tp2R, color=color.new(color.orange, 40), style=line.style_dashed))
+        array.push(s_bo_lines, line.new(bar_index, close - _bo_risk * tp3R, bar_index + 20, close - _bo_risk * tp3R, color=color.new(color.maroon, 40), style=line.style_dashed))
+        array.push(s_bo_lines, line.new(bar_index, _bo_sl,                  bar_index + 20, _bo_sl,                  color=color.new(color.lime,   50), style=line.style_dashed))

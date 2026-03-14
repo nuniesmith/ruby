@@ -1,0 +1,75 @@
+{
+  // ───────────────────────────────────────────────────────────────────
+  // Ruby Futures — Zed Project Settings
+  // ───────────────────────────────────────────────────────────────────
+  // Type checking: mypy (pyright disabled)
+  // Linting/formatting: ruff
+  // Python: 3.13 via .venv/
+  // ───────────────────────────────────────────────────────────────────
+
+  "languages": {
+    "Python": {
+      "language_servers": ["ruff", "!pyright"],
+      "formatter": {
+        "external": {
+          "command": ".venv/bin/ruff",
+          "arguments": ["format", "--stdin-filename", "{buffer_path}", "-"]
+        }
+      },
+      "format_on_save": "on",
+      "tab_size": 4
+    }
+  },
+
+  "lsp": {
+    "ruff": {
+      "binary": {
+        "path": ".venv/bin/ruff"
+      },
+      "initialization_options": {
+        "settings": {
+          "lineLength": 120,
+          "lint": {
+            "enable": true
+          },
+          "format": {
+            "enable": true
+          }
+        }
+      }
+    },
+    "pyright": {
+      "settings": {
+        "python": {
+          "pythonPath": ".venv/bin/python"
+        },
+        "pyright": {
+          "disableOrganizeImports": true
+        }
+      }
+    }
+  },
+
+  "file_scan_exclusions": [
+    "**/.git",
+    "**/.venv",
+    "**/__pycache__",
+    "**/.mypy_cache",
+    "**/.pytest_cache",
+    "**/.ruff_cache",
+    "**/node_modules",
+    "**/dataset/images"
+  ],
+
+  "search": {
+    "exclude": {
+      ".venv": true,
+      "__pycache__": true,
+      ".mypy_cache": true,
+      ".pytest_cache": true,
+      ".ruff_cache": true,
+      "dataset/images": true,
+      "models/*.pt": true
+    }
+  }
+}

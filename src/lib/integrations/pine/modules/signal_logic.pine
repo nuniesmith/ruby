@@ -1,0 +1,26 @@
+// ── Module: signal_logic ────────────────────────────────────────────────────
+// Part of the Ruby indicator — assembled by PineScriptGenerator
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 9. MAIN SIGNALS
+// Long  = strong TG bounce  + bullBias + AO+ + vol spike + quality ≥ threshold
+// Short = strong TG reject  + bearBias + AO- + vol spike + quality ≥ threshold
+// ══════════════════════════════════════════════════════════════════════════════
+volOK  = volume > volAvg * volMult
+vwapL  = not requireVWAP or close > vwap
+vwapS  = not requireVWAP or close < vwap
+qualOK = quality >= minQualityPct
+
+bool longSignal_raw  = strong_bot and  bullBias and ao > 0 and volOK and vwapL and qualOK and barstate.isconfirmed
+bool shortSignal_raw = strong_top and not bullBias and ao < 0 and volOK and vwapS and qualOK and barstate.isconfirmed
+
+// 5-bar cooldown to avoid repeated signals on the same move
+var int lastLong  = 0
+var int lastShort = 0
+bool longSignal  = longSignal_raw  and (bar_index - lastLong  > 5)
+bool shortSignal = shortSignal_raw and (bar_index - lastShort > 5)
+
+if longSignal
+    lastLong  := bar_index
+if shortSignal
+    lastShort := bar_index

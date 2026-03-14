@@ -1,0 +1,28 @@
+# =============================================================================
+# Futures Trading Platform — Git Attributes
+# =============================================================================
+# Champion model files (.pt, .onnx) are committed to this repo.
+# They are tracked via Git LFS because they exceed GitHub's 50 MB file
+# size warning (.pt is ~81 MB, .onnx is ~85 MB).
+#
+# To set up LFS on a fresh clone:
+#   git lfs install
+#   git lfs pull
+
+# --- Ensure consistent line endings for source files ---
+*.py text eol=lf
+*.md text eol=lf
+*.toml text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.json text eol=lf
+*.csv text eol=lf
+*.sh text eol=lf
+*.txt text eol=lf
+Dockerfile text eol=lf
+docker-compose*.yml text eol=lf
+
+# --- Git LFS — large binary model files ---
+# Tracked files are stored in LFS; only pointer files live in the normal tree.
+models/breakout_cnn_best.pt   filter=lfs diff=lfs merge=lfs -text
+models/breakout_cnn_best.onnx filter=lfs diff=lfs merge=lfs -text

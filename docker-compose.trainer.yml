@@ -1,0 +1,168 @@
+# =============================================================================
+# Ruby Futures — Trainer-Only Docker Compose
+# =============================================================================
+#
+# Standalone compose file for the GPU training rig (home laptop).
+# This file defines ONLY the trainer service — no postgres, redis, engine,
+# web, or monitoring services. The trainer fetches all market data from the
+# engine service over Tailscale via ENGINE_DATA_URL, so it needs no direct
+# database access, no MASSIVE_API_KEY, and no KRAKEN_API_KEY.
+#
+# Usage:
+#   docker compose -f docker-compose.trainer.yml up -d
+#   docker compose -f docker-compose.trainer.yml logs -f trainer
+#   docker compose -f docker-compose.trainer.yml down
+#
+# Required .env variables:
+#   ENGINE_DATA_URL  — Engine HTTP API base URL (e.g. http://100.122.184.58:8050)
+#
+# Optional .env variables:
+#   API_KEY          — Shared secret for inter-service authentication
+#   TRAINER_API_KEY  — Bearer token to protect the /train endpoint
+#
+# =============================================================================
+
+services:
+    # -------------------------------------------------------------------------
+    # Trainer — GPU CNN retraining server (port 8200)
+    #
+    # Runs a FastAPI server that listens for POST /train requests. Each request
+    # triggers the full pipeline: dataset generation → model training →
+    # evaluation → champion promotion.
+    #
+    # Market data is fetched from the engine service over Tailscale
+    # (ENGINE_DATA_URL → GET /bars/{symbol}) — the engine handles the full
+    # resolution chain: Redis → Postgres → Massive/Kraken API internally.
+    # The trainer needs NO direct access to databases or external data APIs.
+    #
+    # Requires NVIDIA GPU + nvidia-container-toolkit on the host.
+    # -------------------------------------------------------------------------
+    trainer:
+        image: nuniesmith/futures:trainer
+        build:
+            context: .
+            dockerfile: docker/trainer/Dockerfile
+        restart: unless-stopped
+        shm_size: 4gb
+        ports:
+            - "8200:8200"
+        deploy:
+            resources:
+                reservations:
+                    devices:
+                        - driver: nvidia
+                          count: 1
+                          capabilities: [gpu]
+        environment:
+            # ----------------------------------------------------------------
+            # Trainer server config
+            # ----------------------------------------------------------------
+            - TRAINER_HOST=0.0.0.0
+            - TRAINER_PORT=8200
+            # Optional: set a bearer token to protect the /train endpoint.
+            # Leave unset (or empty) for no authentication.
+            - TRAINER_API_KEY=${TRAINER_API_KEY:-}
+
+            # ----------------------------------------------------------------
+            # Inter-service authentication
+            # Shared secret between engine and trainer for API calls.
+            # ----------------------------------------------------------------
+            - API_KEY=${API_KEY:-}
+
+            # ----------------------------------------------------------------
+            # Engine data service URL (Tailscale)
+            # The trainer fetches ALL market data (futures + crypto) from
+            # the engine's HTTP API. The engine handles Redis → Postgres →
+            # Massive/Kraken resolution internally.
+            # ----------------------------------------------------------------
+            - ENGINE_DATA_URL=${ENGINE_DATA_URL:-http://100.122.184.58:8050}
+
+            # ----------------------------------------------------------------
+            # Validation gate thresholds (pipeline defaults — can be
+            # overridden per-request in the POST /train body)
+            # ----------------------------------------------------------------
+            - CNN_RETRAIN_MIN_ACC=${CNN_RETRAIN_MIN_ACC:-80.0}
+            - CNN_RETRAIN_MIN_PRECISION=${CNN_RETRAIN_MIN_PRECISION:-75.0}
+            - CNN_RETRAIN_MIN_RECALL=${CNN_RETRAIN_MIN_RECALL:-70.0}
+            - CNN_RETRAIN_IMPROVEMENT=${CNN_RETRAIN_IMPROVEMENT:-0.0}
+
+            # ----------------------------------------------------------------
+            # Training hyperparameters (pipeline defaults)
+            # ----------------------------------------------------------------
+            - CNN_RETRAIN_EPOCHS=${CNN_RETRAIN_EPOCHS:-60}
+            - CNN_RETRAIN_BATCH_SIZE=${CNN_RETRAIN_BATCH_SIZE:-32}
+            - CNN_RETRAIN_LR=${CNN_RETRAIN_LR:-0.0001}
+            - CNN_RETRAIN_PATIENCE=${CNN_RETRAIN_PATIENCE:-12}
+
+            # ----------------------------------------------------------------
+            # Data source — routed through engine (no direct API keys needed)
+            # The "engine" bars_source calls GET /bars/{symbol} on the engine
+            # which handles Massive (futures) and Kraken (crypto) internally.
+            # ----------------------------------------------------------------
+            - CNN_RETRAIN_BARS_SOURCE=${CNN_RETRAIN_BARS_SOURCE:-engine}
+
+            # ----------------------------------------------------------------
+            # Engine bar-fetch timing knobs
+            #
+            # The data service now fires background fills asynchronously and
+            # returns immediately with existing data + filling=true when a
+            # backfill is in progress.  The trainer polls fill status and
+            # re-fetches once complete, so it never times out on long fills.
+            #
+            # ENGINE_BARS_TIMEOUT     — HTTP timeout (seconds) per request
+            #                           to GET /bars/{symbol}.  60s is safe
+            #                           for the initial call since the service
+            #                           returns immediately.  Increase on slow
+            #                           Tailscale links (e.g. 120).
+            # ENGINE_FILL_POLL_MAX_WAIT — Max seconds to wait for a running
+            #                           background fill before giving up and
+            #                           using partial data.  300 = 5 minutes,
+            #                           covers most initial Massive backfills.
+            # ENGINE_FILL_POLL_INTERVAL — Seconds between fill-status polls.
+            # ----------------------------------------------------------------
+            - ENGINE_BARS_TIMEOUT=${ENGINE_BARS_TIMEOUT:-60}
+            - ENGINE_FILL_POLL_MAX_WAIT=${ENGINE_FILL_POLL_MAX_WAIT:-300}
+            - ENGINE_FILL_POLL_INTERVAL=${ENGINE_FILL_POLL_INTERVAL:-10}
+
+            # ----------------------------------------------------------------
+            # Dataset generation defaults
+            # ----------------------------------------------------------------
+            - CNN_RETRAIN_SYMBOLS=${CNN_RETRAIN_SYMBOLS:-MGC,SIL,MES,MNQ,M2K,MYM,ZN,ZB,ZW}
+            - CNN_RETRAIN_DAYS_BACK=${CNN_RETRAIN_DAYS_BACK:-180}
+            - CNN_RETRAIN_ORB_SESSION=${CNN_RETRAIN_ORB_SESSION:-all}
+            - CNN_ORB_SESSION=${CNN_ORB_SESSION:-all}
+
+            # ----------------------------------------------------------------
+            # Python / runtime
+            # ----------------------------------------------------------------
+            - PYTHONPATH=/app/src
+            - PYTHONUNBUFFERED=1
+
+            # NVIDIA container toolkit
+            - NVIDIA_VISIBLE_DEVICES=all
+            - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+
+        volumes:
+            # Bind-mounts — files land directly on the host so rsync can
+            # pull models/ without any docker cp / volume-export dance.
+            - ./models:/app/models
+            - ./dataset:/app/dataset
+            - ./data:/app/data
+            - ./scripts:/app/scripts
+            - ./src:/app/src
+
+        # Default command: run the persistent HTTP training server.
+        command: ["python", "-m", "lib.services.training.trainer_server"]
+
+        healthcheck:
+            test:
+                [
+                    "CMD",
+                    "python",
+                    "-c",
+                    "import urllib.request; urllib.request.urlopen('http://localhost:8200/health')",
+                ]
+            interval: 30s
+            timeout: 10s
+            start_period: 60s
+            retries: 3

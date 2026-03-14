@@ -1,0 +1,546 @@
+# Ruby Trading Indicator Configuration
+
+# Version Info
+version:
+    major: 1
+    minor: 1
+    patch: 0
+    name: "Pinescript Trading Indicator Generator"
+    description: "Automated generator for Pine Script trading indicators with advanced features."
+    update_date: "2026-03-11"
+
+# Output Settings
+output_filenames:
+    ruby: "ruby.pine"
+
+# File Orders - Controls the sequence of Pine Script module inclusion
+file_orders:
+    ruby:
+        - "header.pine" # 0 - Copyright, version, indicator declaration
+        - "inputs.pine" # 1 - All input.*() calls (Settings)
+        - "core_calculations.pine" # 2 - EMA9, VWAP, ATR14, volAvg, AO, RSI14
+        - "top_g_channel.pine" # 3 - Top G channel logic
+        - "wave_analysis.pine" # 4 - Wave tracking, bull/bear waves
+        - "market_regime.pine" # 5 - Market regime + phase
+        - "volatility.pine" # 6 - Volatility percentile
+        - "session_orb.pine" # 7 - Session bias, ORB, IB, squeeze, prev-day H/L
+        - "quality_score.pine" # 8 - Quality score calculation
+        - "signal_logic.pine" # 9 - Main signals, cooldown
+        - "trade_management.pine" # 10 - Entry / SL / TP levels
+        - "visualization.pine" # 11 - Bar colouring, plots, entry zones, breakout markers
+        - "signal_labels.pine" # 12 - Signal shapes, labels, TP/SL guide lines
+        - "info_table.pine" # 13 - Dashboard table
+        - "alerts.pine" # 14 - Alert conditions
+        - "footer.pine" # 15 - Closing comment
+
+    # Custom indicator type definition can be added here (disabled by default)
+    custom:
+        enabled: false
+        files: []
+
+# Indicator Type Settings
+indicator:
+    type:
+        default: "ruby" # Only Ruby is supported
+        description: "Type of indicator to generate"
+    show_logo:
+        default: true
+        description: "Display indicator logo on chart"
+    timeframe_compatibility:
+        min_timeframe: "1m"
+        max_timeframe: "1D"
+        recommended: "15m"
+
+# Top G Settings
+top_g:
+    range_length:
+        default: 150
+        min: 1
+        max: 500
+        description: "Range length for Top G calculation"
+    main_color: "#0000FF" # Blue
+    use_adaptive_range:
+        default: false
+        description: "Dynamically adjust range based on volatility"
+    adaptive_multiplier:
+        default: 1.5
+        min: 0.5
+        max: 3.0
+        step: 0.1
+    display_levels:
+        default: true
+
+# ATR & Machine Learning Settings
+atr:
+    length:
+        default: 10
+        min: 1
+        max: 50
+        description: "ATR calculation length"
+    stop_loss_multiplier:
+        default: 3.0
+        min: 1.0
+        max: 5.0
+        step: 0.1
+    take_profit_multiplier:
+        default: 3.0
+        min: 1.0
+        max: 5.0
+        step: 0.1
+    ml_training_period:
+        default: 100
+        min: 50
+        max: 500
+    volatility_percentiles:
+        high: 0.75
+        medium: 0.50
+        low: 0.25
+    max_k_means_iterations:
+        default: 50
+        min: 10
+        max: 200
+    use_log_returns:
+        default: true
+        description: "Use logarithmic returns for calculations"
+    volatility_window:
+        default: 20
+        min: 5
+        max: 100
+    use_volatility_filter:
+        default: true
+
+# Market Phases Detection
+market_phases:
+    enable:
+        default: true
+        description: "Enable market phase detection"
+    window_length:
+        default: 200
+        min: 50
+        max: 500
+    trend_threshold:
+        default: 0.6
+        min: 0.1
+        max: 1.0
+        step: 0.05
+    phase_colors:
+        uptrend: "#00FF00"
+        downtrend: "#FF0000"
+        ranging: "#FFFF00"
+        uncertain: "#CCCCCC"
+    display_phase_labels:
+        default: true
+
+# Risk Management
+risk_management:
+    use_dynamic_risk:
+        default: true
+        description: "Enable dynamic risk adjustment"
+    fixed_sl_multiplier:
+        default: 2.0
+        min: 1.0
+        max: 5.0
+        step: 0.1
+    fixed_tp_multiplier:
+        default: 3.0
+        min: 1.0
+        max: 5.0
+        step: 0.1
+    risk_percentage:
+        default: 1.0
+        min: 0.1
+        max: 5.0
+        step: 0.1
+    fixed_tp_ratio:
+        default: 2.0
+        min: 1.0
+        max: 10.0
+        step: 0.5
+        description: "Take profit as multiple of risk"
+    account_size:
+        default: 5000
+        min: 100
+    partial_tp:
+        enable:
+            default: true
+        tp1_percent:
+            default: 40
+            min: 0
+            max: 100
+            step: 5
+        tp2_percent:
+            default: 40
+            min: 0
+            max: 100
+            step: 5
+    max_risk_per_trade:
+        default: 2.0
+        min: 0.1
+        max: 10.0
+        step: 0.1
+        description: "Maximum risk percentage per trade"
+
+# Trailing Stop Settings
+trailing_stop:
+    use_trailing_stop:
+        default: true
+    activation_ratio:
+        default: 1.5
+        min: 1.0
+        max: 5.0
+        step: 0.1
+        description: "Activate trailing stop after x times initial risk"
+    candles_lookback:
+        default: 3
+        min: 1
+        max: 20
+    trailing_step:
+        default: 0.5
+        min: 0.1
+        max: 2.0
+        step: 0.1
+        description: "Size of each trailing adjustment"
+    lock_profit_threshold:
+        default: 1.0
+        min: 0.5
+        max: 3.0
+        step: 0.1
+        description: "Lock in profit at x times risk"
+
+# Session & Time Filters
+session_filters:
+    use_session_filter:
+        default: true
+    use_monday_filter:
+        default: true
+        description: "Avoid trading in first hour of Monday"
+    use_friday_filter:
+        default: true
+        description: "Close trades by Friday end"
+    optimal_session:
+        start: "0000" # 00:00 EST
+        end: "2400" # 24:00 EST
+    allow_weekend_trading:
+        default: false
+    high_volatility_sessions:
+        start_times: ["0800", "1400", "2000"]
+        duration_minutes: 120
+    news_filter:
+        enable:
+            default: true
+        filter_high_impact:
+            default: true
+        pre_news_minutes:
+            default: 30
+        post_news_minutes:
+            default: 60
+
+# Awesome Oscillator Settings
+awesome_oscillator:
+    fast_period:
+        default: 5
+        min: 1
+        max: 20
+    slow_period:
+        default: 34
+        min: 5
+        max: 100
+    signal_period:
+        default: 7
+        min: 1
+        max: 20
+    use_zero_crossover:
+        default: true
+    use_signal_crossover:
+        default: true
+    twin_peaks:
+        enable:
+            default: true
+        lookback_bars:
+            default: 5
+            min: 2
+            max: 10
+    saucer:
+        enable:
+            default: true
+        sensitivity:
+            default: 0.5
+            min: 0.1
+            max: 1.0
+            step: 0.1
+
+# Minute Filters
+minute_filters:
+    enable:
+        default: true
+        description: "Enable minute-specific filters"
+    noise_threshold:
+        default: 0.3
+        min: 0.1
+        max: 0.9
+        step: 0.05
+    min_price_movement:
+        default: 0.001
+        min: 0.0001
+        max: 0.01
+        step: 0.0001
+    tick_volume_threshold:
+        default: 1.5
+        min: 1.0
+        max: 5.0
+        step: 0.1
+        description: "Minimum volume as multiple of average"
+    use_higher_tf_confirmation:
+        default: true
+        description: "Require confirmation from higher timeframe"
+    higher_tf_multiplier:
+        default: 5
+        min: 3
+        max: 15
+        description: "Multiple of current timeframe to check"
+
+# Candle Patterns
+candle_patterns:
+    enable:
+        default: true
+    pattern_types:
+        engulfing:
+            default: true
+        doji:
+            default: true
+        hammer:
+            default: true
+        shooting_star:
+            default: true
+        morning_star:
+            default: true
+        evening_star:
+            default: true
+    min_body_to_wick_ratio:
+        default: 0.5
+        min: 0.1
+        max: 2.0
+        step: 0.1
+    pattern_confirmation_bars:
+        default: 1
+        min: 0
+        max: 3
+
+# Visual Settings
+visual:
+    bullish_color: "#00FFBB"
+    bearish_color: "#FF1100"
+    show_potential_signals:
+        default: false
+        description: "Display early warning signals"
+    show_market_phase:
+        default: false
+        description: "Show market phase on chart"
+    show_entry_labels:
+        default: true
+    show_trade_details:
+        default: true
+    clean_chart_mode:
+        default: false
+    show_session_marker:
+        default: true
+    background_opacity:
+        default: 50
+        min: 0
+        max: 100
+        step: 5
+    use_emoji_labels:
+        default: true
+    alert_visual_indicator:
+        default: true
+    colorblind_mode:
+        default: false
+        description: "Use colorblind-friendly palette"
+    label_font_size:
+        default: 12
+        min: 8
+        max: 24
+    custom_theme:
+        enable:
+            default: false
+        background: "#000000"
+        text: "#FFFFFF"
+        grid: "#333333"
+
+# Signal Sensitivity & Filters
+signal_filters:
+    sensitivity:
+        default: 0.5
+        min: 0.1
+        max: 1.0
+        step: 0.1
+        description: "Higher values make signal detection more sensitive"
+    cooldown_bars:
+        default: 10
+        min: 1
+        max: 50
+        description: "Minimum bars between signals"
+    require_trend_alignment:
+        default: true
+    require_min_volatility:
+        default: false
+    min_volatility_percentile:
+        default: 0.3
+        min: 0.1
+        max: 0.9
+        step: 0.1
+    avoid_high_volatility:
+        default: true
+    max_volatility_percentile:
+        default: 0.9
+        min: 0.6
+        max: 1.0
+        step: 0.1
+    require_min_sl_distance:
+        default: true
+    min_sl_atr_distance:
+        default: 1.0
+        min: 0.5
+        max: 10.0
+        step: 0.5
+    confirmation_filter:
+        use_macd:
+            default: true
+        use_rsi:
+            default: true
+        rsi_overbought:
+            default: 70
+            min: 60
+            max: 90
+        rsi_oversold:
+            default: 30
+            min: 10
+            max: 40
+    quality_ranking:
+        enable:
+            default: true
+        min_quality_score:
+            default: 0.6
+            min: 0.1
+            max: 1.0
+            step: 0.1
+
+# Performance Tracker
+performance_tracker:
+    enable:
+        default: true
+    lookback_periods:
+        default: 100
+        min: 20
+        max: 500
+    auto_optimize:
+        default: false
+        description: "Automatically adjust parameters based on performance"
+    track_pnl:
+        default: true
+    track_win_rate:
+        default: true
+    track_average_win_loss:
+        default: true
+    display_stats:
+        default: true
+    win_threshold:
+        default: 0.6
+        min: 0.4
+        max: 0.9
+        step: 0.05
+        description: "Minimum win rate for good performance"
+
+# Info Table
+info_table:
+    enable:
+        default: true
+    position:
+        default: "bottom_right"
+        options: ["top_left", "top_right", "bottom_left", "bottom_right"]
+    show_indicator_stats:
+        default: true
+    show_trading_stats:
+        default: true
+    transparency:
+        default: 20
+        min: 0
+        max: 100
+        step: 5
+    show_debug_info:
+        default: false
+    background_color: "#333333"
+    text_color: "#FFFFFF"
+
+# Alert Conditions
+alert_conditions:
+    enable_entry_alerts:
+        default: true
+    enable_exit_alerts:
+        default: true
+    enable_sl_alerts:
+        default: true
+    enable_tp_alerts:
+        default: true
+    alert_message_template:
+        default: "{{strategy.order.action}} signal on {{ticker}} {{interval}} at {{close}}"
+    include_risk_info:
+        default: true
+    include_setup_quality:
+        default: true
+    enable_mobile_notifications:
+        default: true
+    sound_alerts:
+        enable:
+            default: true
+        sound_file:
+            default: "alert_1"
+            options: ["alert_1", "alert_2", "alert_3", "alert_4", "alert_5"]
+
+# Re-entry Settings
+re_entry:
+    allow_reentry:
+        default: true
+    max_bars_for_reentry:
+        default: 10
+        min: 1
+        max: 50
+    size_reduction_percent:
+        default: 30
+        min: 0
+        max: 90
+    max_reentries:
+        default: 2
+        min: 1
+        max: 5
+    require_stronger_signal:
+        default: true
+    minimum_bars_between:
+        default: 3
+        min: 1
+        max: 20
+
+# Summer Winter (Heat) Settings
+heat:
+    sensitivity:
+        default: 70
+        min: 10
+        max: 100
+        step: 10
+    lookback_period:
+        default: 14
+        min: 5
+        max: 50
+    filter_signals:
+        default: true
+    heat_threshold:
+        default: 50
+        min: 10
+        max: 90
+        step: 5
+    display_heat_gauge:
+        default: true
+    heat_colors:
+        cold: "#0000FF"
+        neutral: "#FFFF00"
+        hot: "#FF0000"

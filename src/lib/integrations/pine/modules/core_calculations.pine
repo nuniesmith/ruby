@@ -1,0 +1,12 @@
+// ── Module: core_calculations ───────────────────────────────────────────────
+// Part of the Ruby indicator — assembled by PineScriptGenerator
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 2. CORE INDICATORS
+// ══════════════════════════════════════════════════════════════════════════════
+ema9   = ta.ema(close, 9)
+vwap   = ta.vwap(hlc3)
+atr14  = ta.atr(14)
+volAvg = ta.sma(volume, 20)
+ao     = ta.sma(hl2, 5) - ta.sma(hl2, 34)    // Awesome Oscillator
+rsi14  = ta.rsi(close, 14)

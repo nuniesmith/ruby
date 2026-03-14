@@ -1,0 +1,24 @@
+// ── Module: trade_management ────────────────────────────────────────────────
+// Part of the Ruby indicator — assembled by PineScriptGenerator
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 10. ENTRY · SL · TP LEVELS
+// SL = 1 ATR beyond the signal candle's wick
+// TP levels are multiples of 1R (risk = Entry – SL)
+// ══════════════════════════════════════════════════════════════════════════════
+
+// Long levels (captured on signal bar)
+l_entry = close
+l_sl    = low  - atr14
+l_risk  = l_entry - l_sl
+l_tp1   = l_entry + l_risk * tp1R
+l_tp2   = l_entry + l_risk * tp2R
+l_tp3   = l_entry + l_risk * tp3R
+
+// Short levels
+s_entry = close
+s_sl    = high + atr14
+s_risk  = s_sl - s_entry
+s_tp1   = s_entry - s_risk * tp1R
+s_tp2   = s_entry - s_risk * tp2R
+s_tp3   = s_entry - s_risk * tp3R

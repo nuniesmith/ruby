@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>📊 DOM Ladder — Ruby Futures</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📊</text></svg>"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+<script src="https://unpkg.com/htmx.org@1.9.12"></script>
+<style>
+:root{
+  --bg:#0a0a0f;--card:#12121a;--card2:#1a1a26;--s3:#222233;
+  --border:#2a2a3a;--bl:#353548;
+  --accent:#00d4ff;--abg:rgba(0,212,255,.08);--ab:rgba(0,212,255,.25);
+  --green:#00e676;--green-bar:rgba(0,230,118,.35);
+  --red:#ff4560;--red-bar:rgba(255,69,96,.35);
+  --amber:#ffb020;
+  --text:#e0e0e0;--dim:#6b7394;--muted:#3a3f55;
+  --mono:'JetBrains Mono',monospace;--head:'Syne',sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--mono);font-size:13px}
+::-webkit-scrollbar{width:6px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--bl);border-radius:3px}
+#app{display:flex;flex-direction:column;height:100vh}
+#topbar{display:flex;align-items:center;gap:10px;padding:0 16px;height:48px;background:var(--card);border-bottom:1px solid var(--border);flex-shrink:0}
+.logo{display:flex;align-items:center;gap:8px;text-decoration:none;color:var(--text);font-family:var(--head);font-weight:800;font-size:16px}
+.logo-dot{width:10px;height:10px;border-radius:50%;background:var(--accent);box-shadow:0 0 8px var(--accent)}
+.nav-links{display:flex;gap:2px;margin-left:16px;flex-wrap:wrap}
+.nav-link{color:var(--dim);text-decoration:none;font-size:11px;padding:6px 8px;border-radius:6px;transition:all .15s;white-space:nowrap}
+.nav-link:hover{color:var(--text);background:var(--abg)}
+.nav-link.active{color:var(--accent);background:var(--abg)}
+.nav-right{margin-left:auto;display:flex;align-items:center;gap:8px}
+.sdot{width:7px;height:7px;border-radius:50%;display:inline-block}
+.sdot.ok{background:var(--green);box-shadow:0 0 6px var(--green)}
+.sdot.off{background:var(--red)}
+.slbl{font-size:10px;color:var(--dim);letter-spacing:.5px}
+#main{flex:1;display:flex;flex-direction:column;overflow:hidden;padding:16px;gap:12px}
+.controls{display:flex;align-items:center;gap:12px;padding:10px 16px;background:var(--card);border:1px solid var(--border);border-radius:10px;flex-wrap:wrap}
+.controls label{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;font-family:var(--head);font-weight:600}
+.controls select,.controls button{background:var(--card2);border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:12px;padding:7px 14px;border-radius:8px;cursor:pointer;transition:all .15s;outline:none}
+.controls select:focus,.controls button:focus{border-color:var(--accent)}
+.controls button:hover{background:var(--abg);border-color:var(--accent);color:var(--accent)}
+.btn-a{background:var(--abg)!important;border-color:var(--ab)!important;color:var(--accent)!important}
+.spread-box{display:flex;align-items:center;gap:8px;margin-left:auto;padding:6px 14px;background:var(--card2);border:1px solid var(--border);border-radius:8px}
+.spread-label{font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px}
+.spread-val{font-size:14px;font-weight:700;color:var(--amber)}
+.last-trade{display:flex;align-items:center;gap:6px;font-size:12px}
+.last-trade .up{color:var(--green)}
+.last-trade .down{color:var(--red)}
+.ref-ind{font-size:10px;color:var(--muted)}
+.stats-row{display:flex;gap:10px;flex-wrap:wrap}
+.sc{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 16px;flex:1;min-width:120px;display:flex;flex-direction:column;gap:2px}
+.sc-l{font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;font-family:var(--head)}
+.sc-v{font-size:16px;font-weight:700}
+.sc-v.green{color:var(--green)}
+.sc-v.red{color:var(--red)}
+.sc-v.cyan{color:var(--accent)}
+.sc-v.amber{color:var(--amber)}
+.ladder-wrap{flex:1;overflow-y:auto;background:var(--card);border:1px solid var(--border);border-radius:10px}
+.ladder-head{display:grid;grid-template-columns:90px 1fr 100px 1fr 90px;padding:8px 12px;font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border);background:var(--card2);position:sticky;top:0;z-index:2;font-family:var(--head)}
+.ladder-head span:nth-child(1){text-align:right}
+.ladder-head span:nth-child(3){text-align:center}
+.ladder-head span:nth-child(5){text-align:left}
+.lr{display:grid;grid-template-columns:90px 1fr 100px 1fr 90px;padding:4px 12px;font-size:12px;border-bottom:1px solid rgba(42,42,58,.3);transition:background .1s;align-items:center;min-height:30px}
+.lr:hover{background:rgba(255,255,255,.02)}
+.lr.best-bid{background:rgba(0,230,118,.06)}
+.lr.best-ask{background:rgba(255,69,96,.06)}
+.lr.spread-row{background:var(--card2);border-top:2px solid var(--amber);border-bottom:2px solid var(--amber);justify-content:center;text-align:center;font-size:11px;font-weight:600;color:var(--amber);grid-template-columns:1fr;padding:6px 12px}
+.lr.last-marker{box-shadow:inset 3px 0 0 var(--accent)}
+.bq{text-align:right;font-weight:600;color:var(--green);padding-right:4px}
+.aq{text-align:left;font-weight:600;color:var(--red);padding-left:4px}
+.pc{text-align:center;font-weight:600;font-size:12px;color:var(--text)}
+.bc{position:relative;height:22px;display:flex;align-items:center;overflow:hidden;border-radius:3px}
+.bc.bid{justify-content:flex-end}
+.bc.ask{justify-content:flex-start}
+.vb{height:100%;border-radius:3px;min-width:2px;transition:width .2s}
+.bid .vb{background:var(--green-bar);border-right:2px solid var(--green)}
+.ask .vb{background:var(--red-bar);border-left:2px solid var(--red)}
+.imbalance{font-size:8px;padding:1px 4px;border-radius:3px;margin:0 4px;font-weight:700}
+.imb-buy{background:rgba(0,230,118,.15);color:var(--green)}
+.imb-sell{background:rgba(255,69,96,.15);color:var(--red)}
+@media(max-width:768px){
+  .controls{gap:6px;padding:8px}
+  .ladder-head,.lr{grid-template-columns:60px 1fr 80px 1fr 60px;padding:3px 6px;font-size:10px}
+  .spread-box{margin-left:0}
+  .stats-row{flex-direction:column}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <header id="topbar">
+    <a href="/" class="logo"><div class="logo-dot"></div><span>RUBY</span></span></a>
+    <nav class="nav-links">
+      <a href="/" class="nav-link">📈 Dashboard</a>
+      <a href="/signals" class="nav-link">📡 Signals</a>
+      <a href="/trading" class="nav-link">🚀 Trading</a>
+      <a href="/settings" class="nav-link">🔧 Settings</a>
+      <a href="/trainer" class="nav-link">🎓 Trainer</a>
+      <a href="/pine" class="nav-link">🌲 Pine</a>
+      <a href="/chat" class="nav-link">💬 Chat</a>
+      <a href="/dom" class="nav-link active">📊 DOM</a>
+      <a href="/journal" class="nav-link">📓 Journal</a>
+    </nav>
+    <div class="nav-right">
+      <span class="sdot off" id="conn-dot"></span>
+      <span class="slbl" id="conn-label">MOCK</span>
+    </div>
+  </header>
+  <div id="main">
+    <div class="controls">
+      <label></label>Symbol</label>
+      <select id="sym-sel" onchange="changeSym()">
+        <option value="MES" selected>MES</option>
+        <option value="MNQ">MNQ</option>
+        <option value="MGC">MGC</option>
+        <option value="SIL">SIL</option>
+        <option value="M2K">M2K</option>
+        <option value="MYM">MYM</option>
+        <option value="ZN">ZN</option>
+        <option value="ZB">ZB</option>
+        <option value="ZW">ZW</option>
+      </select>
+      <button class="btn-a" onclick="refreshDOM()">↻ Refresh</button>
+      <label style="margin-left:12px;display:flex;align-items:center;gap:6px;cursor:pointer">
+        <input type="checkbox" id="auto-ref" onchange="toggleAuto()" checked style="accent-color:var(--accent)"/>
+        <span style="font-size:11px;color:var(--text);font-family:var(--mono)">Auto (1s)</span>
+      </label>
+      <div class="last-trade" id="last-trade"><span></span>Last: —</span></div>
+      <div class="ref-ind" id="ref-ind"></div>
+      <div class="spread-box">
+        <span class="spread-label">Spread</span>
+        <span class="spread-val" id="spread-val">—</span>
+      </div>
+    </div>
+    <div class="stats-row">
+      <div class="sc"><div class="sc-l">Best Bid</div><div class="sc-v green" id="st-bid">—</div></div>
+      <div class="sc"><div class="sc-l">Best Ask</div><div class="sc-v red" id="st-ask">—</div></div>
+      <div class="sc"><div class="sc-l">Total Bid Vol</div><div class="sc-v cyan" id="st-bvol">—</div></div>
+      <div class="sc"><div class="sc-l">Total Ask Vol</div><div class="sc-v cyan" id="st-avol">—</div></div>
+      <div class="sc"><div class="sc-l">Imbalance</div><div class="sc-v amber" id="st-imb">—</div></div>
+    </div>
+    <div class="ladder-wrap">
+      <div class="ladder-head">
+        <span>Bid Qty</span><span>Bid</span><span>Price</span><span>Ask</span><span>Ask Qty</span>
+      </div>
+      <div id="ladder-body"></div>
+    </div>
+  </div>
+</div>
+<script>
+let curSym='MES',autoTimer=null,lastTP=null,lastTD=null;
+
+const TICK={MES:.25,MNQ:.25,M2K:.1,MYM:1,MGC:.1,SIL:.005,ZN:1/64,ZB:1/32,ZW:.25};
+const DEC={MES:2,MNQ:2,M2K:2,MYM:0,MGC:1,SIL:3,ZN:5,ZB:5,ZW:2};
+const BASE={MES:5580,MNQ:19800,M2K:2080,MYM:39500,MGC:2350,SIL:31.5,ZN:110.5,ZB:118.25,ZW:550};
+
+function mockDOM(sym){
+  const tk=TICK[sym]||.25,dec=DEC[sym]||2,base=BASE[sym]||5580;
+  const half=10;
+  const mid=base+(Math.random()-.5)*tk*6;
+  const bestAsk=Math.ceil(mid/tk)*tk;
+  const bestBid=bestAsk-tk;
+  const rows=[];
+  let tbv=0,tav=0;
+
+  // Ask levels (top, highest price first)
+  for(let i=half-1;i>=0;i--){
+    const p=bestAsk+i*tk;
+    const q=Math.round(Math.random()*180+5);
+    tav+=q;
+    rows.push({price:p,bid:0,ask:q,isBestAsk:i===0,isBestBid:false,isSpread:false});
+  }
+
+  // Spread row marker
+  rows.push({price:0,bid:0,ask:0,isBestAsk:false,isBestBid:false,isSpread:true,spreadVal:((bestAsk-bestBid)/tk).toFixed(0)});
+
+  // Bid levels (below, highest price first)
+  for(let i=0;i<half;i++){
+    const p=bestBid-i*tk;
+    const q=Math.round(Math.random()*180+5);
+    tbv+=q;
+    rows.push({price:p,bid:q,ask:0,isBestAsk:false,isBestBid:i===0,isSpread:false});
+  }
+
+  // Last trade near the mid
+  const ltSide=Math.random()>.5;
+  const lastTrade=ltSide?bestBid:bestAsk;
+  const lastDir=ltSide?'down':'up';
+
+  return{
+    rows,bestBid,bestAsk,
+    spread:((bestAsk-bestBid)/tk).toFixed(0),
+    totalBidVol:tbv,totalAskVol:tav,
+    lastTrade,lastDir,
+    dec,tk,
+    ts:Date.now()
+  };
+}
+
+function renderDOM(d){
+  const body=document.getElementById('ladder-body');
+  const dec=d.dec||DEC[curSym]||2;
+  const tk=d.tk||TICK[curSym]||.25;
+  const maxQty=Math.max(...d.rows.map(r=>Math.max(r.bid||0,r.ask||0)),1);
+  let html='';
+
+  for(const r of d.rows){
+    if(r.isSpread){
+      html+=`<div class="lr spread-row">▸ SPREAD: ${r.spreadVal} tick${r.spreadVal==='1'?'':'s'} ▸</div>`;
+      continue;
+    }
+
+    // Determine row class
+    let cls='lr';
+    if(r.isBestBid) cls+=' best-bid';
+    if(r.isBestAsk) cls+=' best-ask';
+    if(d.lastTrade&&Math.abs(r.price-d.lastTrade)<tk*0.5) cls+=' last-marker';
+
+    const bidPct=r.bid?Math.round(r.bid/maxQty*100):0;
+    const askPct=r.ask?Math.round(r.ask/maxQty*100):0;
+
+    // Imbalance indicator
+    let imbHtml='';
+    if(r.bid>0&&r.ask>0){
+      const ratio=r.bid/r.ask;
+      if(ratio>2) imbHtml='<span class="imbalance imb-buy">BUY</span>';
+      else if(ratio<0.5) imbHtml='<span class="imbalance imb-sell">SELL</span>';
+    }
+
+    const bidQty=r.bid?`<span class="bq">${r.bid}</span>`:'<span class="bq"></span>';
+    const askQty=r.ask?`<span class="aq">${r.ask}</span>`:'<span class="aq"></span>';
+    const bidBar=r.bid?`<div class="bc bid"><div class="vb" style="width:${bidPct}%"></div></div>`:'<div class="bc bid"></div>';
+    const askBar=r.ask?`<div class="bc ask"><div class="vb" style="width:${askPct}%"></div></div>`:'<div class="bc ask"></div>';
+    const priceStr=r.price.toFixed(dec);
+
+    html+=`<div class="${cls}">${bidQty}${bidBar}<span class="pc">${priceStr}${imbHtml}</span>${askBar}${askQty}</div>`;
+  }
+
+  body.innerHTML=html;
+
+  // Update stats
+  document.getElementById('st-bid').textContent=d.bestBid.toFixed(dec);
+  document.getElementById('st-ask').textContent=d.bestAsk.toFixed(dec);
+  document.getElementById('st-bvol').textContent=d.totalBidVol.toLocaleString();
+  document.getElementById('st-avol').textContent=d.totalAskVol.toLocaleString();
+  document.getElementById('spread-val').textContent=d.spread+' tk';
+
+  // Imbalance ratio
+  const imbRatio=d.totalBidVol/(d.totalBidVol+d.totalAskVol)*100;
+  const imbEl=document.getElementById('st-imb');
+  imbEl.textContent=imbRatio.toFixed(1)+'% bid';
+  imbEl.className='sc-v '+(imbRatio>55?'green':imbRatio<45?'red':'amber');
+
+  // Last trade
+  const lt=document.getElementById('last-trade');
+  if(d.lastTrade){
+    const dir=d.lastDir||'up';
+    const arrow=dir==='up'?'▲':'▼';
+    lt.innerHTML=`Last: <span class="${dir}">${arrow} ${d.lastTrade.toFixed(dec)}</span>`;
+    lastTP=d.lastTrade;
+    lastTD=dir;
+  }
+
+  document.getElementById('ref-ind').textContent='Updated '+new Date().toLocaleTimeString();
+}
+
+async function refreshDOM(){
+  curSym=document.getElementById('sym-sel').value;
+  // TODO: Replace mock with real API call:
+  // try{const r=await fetch('/api/dom/snapshot?symbol='+curSym);renderDOM(await r.json());}catch(e){renderDOM(mockDOM(curSym));}
+  renderDOM(mockDOM(curSym));
+}
+
+function changeSym(){
+  lastTP=null;
+  lastTD=null;
+  refreshDOM();
+}
+
+function toggleAuto(){
+  document.getElementById('auto-ref').checked?startAuto():stopAuto();
+}
+
+function startAuto(){
+  stopAuto();
+  autoTimer=setInterval(refreshDOM,1000);
+}
+
+function stopAuto(){
+  if(autoTimer){clearInterval(autoTimer);autoTimer=null;}
+}
+
+// TODO: SSE streaming for real-time DOM updates
+// function connectDOMStream(sym){
+//   const es=new EventSource('/sse/dom?symbol='+sym);
+//   es.addEventListener('snapshot',e=>renderDOM(JSON.parse(e.data)));
+//   es.addEventListener('delta',e=>applyDelta(JSON.parse(e.data)));
+//   es.onerror=()=>console.warn('DOM SSE disconnected');
+//   return es;
+// }
+
+// TODO: Click-to-trade — click a price level to open order entry
+// function onPriceClick(price,side){
+//   window.location.href='/trading?prefill_price='+price+'&side='+side+'&symbol='+curSym;
+// }
+
+// TODO: Display resting orders on the ladder (highlight own order levels)
+// TODO: Cumulative delta column overlay
+// TODO: Volume profile heatmap coloring (intensity by historical volume at price)
+// TODO: Large-order highlighting / iceberg detection
+// TODO: Pull-and-stack detection (spoofing indicator)
+// TODO: Configurable number of levels (10/20/30)
+
+document.addEventListener('DOMContentLoaded',()=>{
+  refreshDOM();
+  if(document.getElementById('auto-ref').checked) startAuto();
+});
+</script>
+</body>
+</html>

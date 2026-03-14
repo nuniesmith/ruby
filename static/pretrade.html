@@ -1,0 +1,723 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>🔍 Pre-Trade Analysis — Ruby Futures</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔍</text></svg>"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+<script src="https://unpkg.com/htmx.org@1.9.12"></script>
+<style>
+:root{
+  --bg:#0a0a0f;--card:#12121a;--card2:#1a1a2e;--s3:#222233;
+  --border:#2a2a3a;--bl:#353548;
+  --accent:#0d6efd;--abg:rgba(13,110,253,.08);--ab:rgba(13,110,253,.25);
+  --green:#10b981;--green-bg:rgba(16,185,129,.1);
+  --red:#ef4444;--red-bg:rgba(239,68,68,.1);
+  --amber:#ffb020;--amber-bg:rgba(255,176,32,.1);
+  --cyan:#00d4ff;
+  --text:#e0e0e0;--dim:#6b7394;--muted:#3a3f55;
+  --mono:'JetBrains Mono',monospace;--head:'Syne',sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--mono);font-size:13px}
+::-webkit-scrollbar{width:6px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--bl);border-radius:3px}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+
+#app{display:flex;flex-direction:column;height:100vh}
+
+/* ── Top Bar ─────────────────────────────────────────── */
+#topbar{display:flex;align-items:center;gap:10px;padding:0 16px;height:48px;background:var(--card);border-bottom:1px solid var(--border);flex-shrink:0}
+.logo{display:flex;align-items:center;gap:8px;text-decoration:none;color:var(--text);font-family:var(--head);font-weight:800;font-size:16px}
+.logo-dot{width:10px;height:10px;border-radius:50%;background:var(--accent);box-shadow:0 0 8px var(--accent)}
+.nav-links{display:flex;gap:2px;margin-left:16px;flex-wrap:wrap}
+.nav-link{color:var(--dim);text-decoration:none;font-size:11px;padding:6px 8px;border-radius:6px;transition:all .15s;white-space:nowrap}
+.nav-link:hover{color:var(--text);background:var(--abg)}
+.nav-link.active{color:var(--accent);background:var(--abg)}
+.nav-right{margin-left:auto;display:flex;align-items:center;gap:8px}
+.sdot{width:7px;height:7px;border-radius:50%;display:inline-block}
+.sdot.ok{background:var(--green);box-shadow:0 0 6px var(--green)}
+.sdot.off{background:var(--red)}
+.slbl{font-size:10px;color:var(--dim);letter-spacing:.5px}
+
+/* ── Main Layout ─────────────────────────────────────── */
+#main{flex:1;display:flex;flex-direction:column;overflow-y:auto;padding:16px;gap:16px}
+.section-title{font-family:var(--head);font-size:18px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:8px}
+.section-subtitle{font-size:11px;color:var(--dim);margin-top:2px}
+
+/* ── Header ──────────────────────────────────────────── */
+.page-header{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px}
+.header-left{display:flex;flex-direction:column;gap:2px}
+.header-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+
+/* ── Buttons ─────────────────────────────────────────── */
+.btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:8px;border:1px solid var(--border);background:var(--card2);color:var(--text);font-family:var(--mono);font-size:12px;cursor:pointer;transition:all .15s;outline:none;white-space:nowrap}
+.btn:hover{border-color:var(--accent);color:var(--accent);background:var(--abg)}
+.btn:active{transform:scale(.97)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.primary:hover{background:#0b5ed7;border-color:#0b5ed7;color:#fff}
+.btn.success{background:var(--green);border-color:var(--green);color:#fff}
+.btn.success:hover{background:#0da472;border-color:#0da472;color:#fff}
+.btn.danger{background:var(--red);border-color:var(--red);color:#fff}
+.btn.danger:hover{background:#dc2626;border-color:#dc2626;color:#fff}
+.btn:disabled{opacity:.4;cursor:not-allowed;pointer-events:none}
+.btn .spinner{display:none;width:14px;height:14px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite}
+.btn.loading .spinner{display:inline-block}
+.btn.loading .btn-text{opacity:.6}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── Filter Bar ──────────────────────────────────────── */
+.filter-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px 14px;background:var(--card);border:1px solid var(--border);border-radius:10px}
+.filter-bar label{font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;font-family:var(--head);font-weight:600}
+.filter-bar select,.filter-bar input{background:var(--card2);border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:12px;padding:6px 12px;border-radius:8px;outline:none}
+.filter-bar select:focus,.filter-bar input:focus{border-color:var(--accent)}
+.chip{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:16px;font-size:10px;font-weight:600;letter-spacing:.3px;text-transform:uppercase}
+.chip.crypto{background:rgba(255,176,32,.12);color:var(--amber);border:1px solid rgba(255,176,32,.3)}
+.chip.futures{background:rgba(13,110,253,.12);color:var(--accent);border:1px solid rgba(13,110,253,.3)}
+
+/* ── Asset Grid ──────────────────────────────────────── */
+.asset-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+.asset-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;transition:all .2s;position:relative;display:flex;flex-direction:column;gap:10px}
+.asset-card:hover{border-color:var(--bl);background:var(--card2)}
+.asset-card.selected{border-color:var(--accent);box-shadow:0 0 12px rgba(13,110,253,.15)}
+.asset-card.analyzed{border-left:3px solid var(--green)}
+
+.card-top{display:flex;justify-content:space-between;align-items:flex-start}
+.card-symbol{font-family:var(--head);font-size:15px;font-weight:700;color:var(--text)}
+.card-name{font-size:10px;color:var(--dim);margin-top:1px}
+.card-checkbox{position:relative}
+.card-checkbox input[type="checkbox"]{appearance:none;width:20px;height:20px;border:2px solid var(--bl);border-radius:6px;background:var(--card2);cursor:pointer;transition:all .15s}
+.card-checkbox input[type="checkbox"]:checked{background:var(--accent);border-color:var(--accent)}
+.card-checkbox input[type="checkbox"]:checked::after{content:'✓';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#fff;font-size:12px;font-weight:700}
+
+.card-price-row{display:flex;align-items:baseline;gap:8px}
+.card-price{font-size:18px;font-weight:700;color:var(--text)}
+.card-change{font-size:12px;font-weight:600;padding:2px 6px;border-radius:4px}
+.card-change.up{color:var(--green);background:var(--green-bg)}
+.card-change.down{color:var(--red);background:var(--red-bg)}
+.card-change.flat{color:var(--dim);background:rgba(107,115,148,.1)}
+
+.card-signals{display:flex;gap:6px;flex-wrap:wrap}
+.signal-badge{display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:600;background:var(--s3);color:var(--dim)}
+.signal-badge.ok{color:var(--green);background:var(--green-bg)}
+.signal-badge.miss{color:var(--muted)}
+
+.card-bottom{display:flex;gap:6px;margin-top:auto}
+.card-bottom .btn{flex:1;justify-content:center;padding:6px 10px;font-size:11px}
+
+/* ── Analysis Panel (Side) ───────────────────────────── */
+.content-area{display:flex;gap:16px;flex:1;min-height:0}
+.content-left{flex:1;display:flex;flex-direction:column;gap:16px;overflow-y:auto;min-width:0}
+.content-right{width:380px;flex-shrink:0;display:flex;flex-direction:column;gap:12px;overflow-y:auto}
+.content-right.hidden{display:none}
+
+.analysis-panel{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:14px}
+.analysis-header{display:flex;justify-content:space-between;align-items:center}
+.analysis-title{font-family:var(--head);font-size:16px;font-weight:700}
+.analysis-close{background:none;border:none;color:var(--dim);cursor:pointer;font-size:16px;padding:4px 8px;border-radius:6px}
+.analysis-close:hover{color:var(--text);background:var(--s3)}
+
+.score-ring{width:100px;height:100px;margin:0 auto;position:relative}
+.score-ring svg{width:100%;height:100%;transform:rotate(-90deg)}
+.score-ring circle{fill:none;stroke-width:8;stroke-linecap:round}
+.score-ring .track{stroke:var(--s3)}
+.score-ring .fill{transition:stroke-dashoffset .6s ease}
+.score-label{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center}
+.score-val{font-size:24px;font-weight:800;font-family:var(--head)}
+.score-sub{font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px}
+
+.signal-rows{display:flex;flex-direction:column;gap:8px}
+.signal-row{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--card2);border-radius:8px}
+.signal-row-label{font-size:11px;color:var(--dim);font-family:var(--head);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.signal-row-value{font-size:13px;font-weight:600}
+.signal-row-value.bullish{color:var(--green)}
+.signal-row-value.bearish{color:var(--red)}
+.signal-row-value.neutral{color:var(--amber)}
+.signal-row-value.na{color:var(--muted);font-style:italic}
+
+.indicator-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.ind-item{padding:6px 10px;background:var(--card2);border-radius:6px;display:flex;flex-direction:column;gap:1px}
+.ind-label{font-size:9px;color:var(--dim);text-transform:uppercase}
+.ind-val{font-size:12px;font-weight:600;color:var(--text)}
+
+.analysis-errors{margin-top:4px;padding:8px 12px;background:var(--red-bg);border:1px solid rgba(239,68,68,.2);border-radius:8px;font-size:11px;color:var(--red)}
+
+/* ── Watchlist ───────────────────────────────────────── */
+.watchlist-section{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.watchlist-header{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border);background:var(--card2)}
+.watchlist-header .section-title{font-size:14px}
+.wl-live{display:flex;align-items:center;gap:6px;font-size:10px;color:var(--dim)}
+.wl-live .pulse{width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+.wl-table{width:100%;border-collapse:collapse}
+.wl-table thead th{padding:8px 12px;font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;font-family:var(--head);text-align:left;border-bottom:1px solid var(--border);background:var(--card)}
+.wl-table tbody tr{border-bottom:1px solid rgba(42,42,58,.3);transition:background .1s}
+.wl-table tbody tr:hover{background:rgba(255,255,255,.02)}
+.wl-table td{padding:8px 12px;font-size:12px;white-space:nowrap}
+.wl-sym{font-weight:700;color:var(--text)}
+.wl-price{font-weight:600;font-size:13px}
+.wl-change{font-weight:600;font-size:12px}
+.wl-change.up{color:var(--green)}
+.wl-change.down{color:var(--red)}
+.wl-signal-cell{display:flex;gap:4px;flex-wrap:wrap}
+.wl-sig{padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700}
+.wl-sig.bull{background:var(--green-bg);color:var(--green)}
+.wl-sig.bear{background:var(--red-bg);color:var(--red)}
+.wl-sig.neut{background:rgba(107,115,148,.1);color:var(--dim)}
+.wl-pnl{font-weight:700}
+.wl-pnl.pos{color:var(--green)}
+.wl-pnl.neg{color:var(--red)}
+.wl-score{font-weight:700}
+
+.wl-empty{padding:32px;text-align:center;color:var(--dim);font-size:12px}
+
+/* ── Toast ───────────────────────────────────────────── */
+#toast-container{position:fixed;top:60px;right:16px;z-index:9999;display:flex;flex-direction:column;gap:8px}
+.toast{padding:10px 16px;border-radius:8px;font-size:12px;font-family:var(--mono);animation:slideIn .25s ease;box-shadow:0 4px 16px rgba(0,0,0,.4);max-width:360px}
+.toast.success{background:var(--green-bg);border:1px solid var(--green);color:var(--green)}
+.toast.error{background:var(--red-bg);border:1px solid var(--red);color:var(--red)}
+.toast.info{background:var(--abg);border:1px solid var(--accent);color:var(--accent)}
+@keyframes slideIn{from{opacity:0;transform:translateX(30px)}to{opacity:1;transform:translateX(0)}}
+
+/* ── Loading Skeleton ────────────────────────────────── */
+.skeleton{background:linear-gradient(90deg,var(--card2) 25%,var(--s3) 50%,var(--card2) 75%);background-size:200% 100%;animation:shimmer 1.5s infinite;border-radius:6px}
+@keyframes shimmer{from{background-position:200% 0}to{background-position:-200% 0}}
+
+/* ── Responsive ──────────────────────────────────────── */
+@media(max-width:900px){
+  .content-area{flex-direction:column}
+  .content-right{width:100%;max-height:50vh}
+  .asset-grid{grid-template-columns:repeat(auto-fill,minmax(240px,1fr))}
+}
+@media(max-width:600px){
+  #topbar{padding:0 10px;height:42px}
+  .nav-links{display:none}
+  #main{padding:10px}
+  .asset-grid{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ── Top Bar ─────────────────────────────────────── -->
+<div id="topbar">
+  <a href="/" class="logo"><span class="logo-dot"></span>Ruby Futures</a>
+  <div class="nav-links">
+    <a href="/" class="nav-link">Dashboard</a>
+    <a href="/dom" class="nav-link">DOM</a>
+    <a href="/chat" class="nav-link">Chat</a>
+    <a href="/journal" class="nav-link">Journal</a>
+    <a href="/pine" class="nav-link">Pine</a>
+    <a href="/pretrade" class="nav-link active">Pre-Trade</a>
+  </div>
+  <div class="nav-right">
+    <span class="sdot" id="status-dot"></span>
+    <span class="slbl" id="status-label">connecting…</span>
+  </div>
+</div>
+
+<!-- ── Main ────────────────────────────────────────── -->
+<div id="main">
+
+  <!-- Header -->
+  <div class="page-header">
+    <div class="header-left">
+      <div class="section-title">🔍 Pre-Trade Analysis</div>
+      <div class="section-subtitle">Select assets for today's session — run signals, review scores, build your watchlist</div>
+    </div>
+    <div class="header-actions">
+      <button class="btn" onclick="analyzeSelected()" id="btn-analyze-sel">
+        <span class="spinner"></span>
+        <span class="btn-text">⚡ Analyze Selected</span>
+      </button>
+      <button class="btn primary" onclick="startMonitoring()" id="btn-monitor">
+        <span class="spinner"></span>
+        <span class="btn-text">🚀 Start Monitoring Selected</span>
+      </button>
+      <button class="btn" onclick="selectAll()" title="Select all assets">☑ All</button>
+      <button class="btn" onclick="selectNone()" title="Deselect all">☐ None</button>
+    </div>
+  </div>
+
+  <!-- Filter Bar -->
+  <div class="filter-bar">
+    <label>Class</label>
+    <select id="filter-class" onchange="applyFilters()">
+      <option value="all">All</option>
+      <option value="crypto">Crypto</option>
+      <option value="futures">Futures</option>
+    </select>
+    <label style="margin-left:10px">Sort</label>
+    <select id="filter-sort" onchange="applyFilters()">
+      <option value="name">Name</option>
+      <option value="score">Score ↓</option>
+      <option value="change">Change ↓</option>
+      <option value="class">Asset Class</option>
+    </select>
+    <label style="margin-left:10px">Search</label>
+    <input type="text" id="filter-search" placeholder="Symbol or name…" oninput="applyFilters()" style="width:160px"/>
+    <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+      <span class="chip crypto">Crypto <span id="count-crypto">0</span></span>
+      <span class="chip futures">Futures <span id="count-futures">0</span></span>
+      <span style="font-size:11px;color:var(--dim)">Selected: <strong id="count-selected" style="color:var(--text)">0</strong></span>
+    </div>
+  </div>
+
+  <!-- Content area: grid + side panel -->
+  <div class="content-area">
+    <div class="content-left">
+      <div class="asset-grid" id="asset-grid">
+        <!-- Cards populated by JS -->
+        <div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--dim)">
+          Loading assets…
+        </div>
+      </div>
+    </div>
+
+    <!-- Analysis Side Panel -->
+    <div class="content-right hidden" id="analysis-panel-container">
+      <div class="analysis-panel" id="analysis-panel">
+        <div class="analysis-header">
+          <div class="analysis-title" id="ap-title">Analysis</div>
+          <button class="analysis-close" onclick="closeAnalysisPanel()">&times;</button>
+        </div>
+        <div id="ap-content">
+          <!-- Filled by JS -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Watchlist Section -->
+  <div class="watchlist-section" id="watchlist-section">
+    <div class="watchlist-header">
+      <div class="section-title">📡 Live Watchlist</div>
+      <div class="wl-live"><div class="pulse"></div> Auto-refresh 2s</div>
+    </div>
+    <div id="watchlist-body">
+      <div class="wl-empty">Select assets and click "Start Monitoring" to populate the watchlist</div>
+    </div>
+  </div>
+
+</div><!-- /main -->
+</div><!-- /app -->
+
+<div id="toast-container"></div>
+
+<script>
+/* ================================================================
+   Pre-Trade Analysis — Client Logic
+   ================================================================ */
+
+const API = '/api/pretrade';
+let allAssets = [];
+let analysisCache = {};
+let selectedSymbols = new Set();
+let watchlistInterval = null;
+
+// ── Toast ──────────────────────────────────────────
+function toast(msg, type='info') {
+  const c = document.getElementById('toast-container');
+  const t = document.createElement('div');
+  t.className = 'toast ' + type;
+  t.textContent = msg;
+  c.appendChild(t);
+  setTimeout(() => { t.style.opacity='0'; t.style.transition='opacity .3s'; setTimeout(()=>t.remove(),300); }, 3500);
+}
+
+// ── API helpers ────────────────────────────────────
+async function apiFetch(path, opts={}) {
+  try {
+    const r = await fetch(API + path, {
+      headers: {'Content-Type':'application/json'},
+      ...opts,
+    });
+    if (!r.ok) {
+      const e = await r.json().catch(()=>({}));
+      throw new Error(e.detail || `HTTP ${r.status}`);
+    }
+    return await r.json();
+  } catch(err) {
+    toast(err.message, 'error');
+    throw err;
+  }
+}
+
+// ── Load Assets ────────────────────────────────────
+async function loadAssets() {
+  try {
+    const data = await apiFetch('/assets');
+    allAssets = data.assets || [];
+    document.getElementById('count-crypto').textContent = allAssets.filter(a=>a.asset_class==='crypto').length;
+    document.getElementById('count-futures').textContent = allAssets.filter(a=>a.asset_class==='futures').length;
+    applyFilters();
+    updateStatus(true);
+  } catch(e) {
+    updateStatus(false);
+    document.getElementById('asset-grid').innerHTML =
+      '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--red)">Failed to load assets: '+e.message+'</div>';
+  }
+}
+
+// ── Load previously selected ───────────────────────
+async function loadSelected() {
+  try {
+    const data = await apiFetch('/selected');
+    selectedSymbols = new Set(data.selected || []);
+    updateSelectedCount();
+    applyFilters();
+    if (selectedSymbols.size > 0) startWatchlistPolling();
+  } catch(e) { /* ignore */ }
+}
+
+// ── Render Asset Grid ──────────────────────────────
+function applyFilters() {
+  const cls = document.getElementById('filter-class').value;
+  const sort = document.getElementById('filter-sort').value;
+  const search = document.getElementById('filter-search').value.toLowerCase().trim();
+
+  let filtered = allAssets.slice();
+
+  if (cls !== 'all') filtered = filtered.filter(a => a.asset_class === cls);
+  if (search) filtered = filtered.filter(a =>
+    a.symbol.toLowerCase().includes(search) || a.name.toLowerCase().includes(search)
+  );
+
+  filtered.sort((a, b) => {
+    if (sort === 'score') {
+      const sa = (analysisCache[a.symbol]||{}).overall_score ?? -1;
+      const sb = (analysisCache[b.symbol]||{}).overall_score ?? -1;
+      return sb - sa;
+    }
+    if (sort === 'change') {
+      return (b.daily_change_pct||0) - (a.daily_change_pct||0);
+    }
+    if (sort === 'class') {
+      return a.asset_class.localeCompare(b.asset_class) || a.name.localeCompare(b.name);
+    }
+    return a.name.localeCompare(b.name);
+  });
+
+  renderGrid(filtered);
+}
+
+function renderGrid(assets) {
+  const grid = document.getElementById('asset-grid');
+  if (!assets.length) {
+    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--dim)">No assets match filters</div>';
+    return;
+  }
+
+  grid.innerHTML = assets.map(a => {
+    const sel = selectedSymbols.has(a.symbol);
+    const cached = analysisCache[a.symbol];
+    const analyzed = !!cached || a.signals_available;
+    const price = a.latest_price != null ? formatPrice(a.latest_price, a.symbol) : '—';
+    const changePct = a.daily_change_pct;
+    const changeClass = changePct > 0 ? 'up' : changePct < 0 ? 'down' : 'flat';
+    const changeStr = changePct != null ? (changePct > 0 ? '+' : '') + changePct.toFixed(2) + '%' : '—';
+    const score = cached ? cached.overall_score : null;
+
+    const cnnOk = cached && cached.cnn_signal;
+    const rubyOk = cached && cached.ruby_signal;
+    const newsOk = cached && cached.news_signal;
+    const indOk = cached && cached.indicators;
+
+    return `
+    <div class="asset-card${sel ? ' selected' : ''}${analyzed ? ' analyzed' : ''}" data-symbol="${a.symbol}" data-class="${a.asset_class}">
+      <div class="card-top">
+        <div>
+          <div class="card-symbol">${a.symbol} ${score != null ? '<span style="font-size:11px;color:'+scoreColor(score)+'">'+score.toFixed(0)+'</span>' : ''}</div>
+          <div class="card-name">${a.name} · <span class="chip ${a.asset_class}" style="font-size:8px;padding:1px 5px">${a.asset_class}</span></div>
+        </div>
+        <div class="card-checkbox">
+          <input type="checkbox" ${sel ? 'checked' : ''} onchange="toggleSelect('${a.symbol}', this.checked)" title="Select for monitoring"/>
+        </div>
+      </div>
+      <div class="card-price-row">
+        <span class="card-price">${price}</span>
+        <span class="card-change ${changeClass}">${changeStr}</span>
+      </div>
+      <div class="card-signals">
+        <span class="signal-badge ${cnnOk ? 'ok' : 'miss'}">CNN ${cnnOk ? '✓' : '✗'}</span>
+        <span class="signal-badge ${rubyOk ? 'ok' : 'miss'}">Ruby ${rubyOk ? '✓' : '✗'}</span>
+        <span class="signal-badge ${newsOk ? 'ok' : 'miss'}">News ${newsOk ? '✓' : '✗'}</span>
+        <span class="signal-badge ${indOk ? 'ok' : 'miss'}">Ind ${indOk ? '✓' : '✗'}</span>
+      </div>
+      <div class="card-bottom">
+        <button class="btn" onclick="analyzeSingle('${a.symbol}')">⚡ Analyze</button>
+        ${cached ? '<button class="btn" onclick="showAnalysis(\''+a.symbol+'\')">📊 Details</button>' : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── Formatting helpers ─────────────────────────────
+function formatPrice(p, sym) {
+  if (p == null) return '—';
+  if (sym && (sym.includes('KRAKEN:XBT') || sym.includes('BTC'))) return '$' + p.toLocaleString('en-US', {minimumFractionDigits:1, maximumFractionDigits:1});
+  if (p >= 100) return '$' + p.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+  if (p >= 1) return '$' + p.toFixed(4);
+  return '$' + p.toFixed(6);
+}
+
+function scoreColor(s) {
+  if (s >= 70) return 'var(--green)';
+  if (s >= 45) return 'var(--amber)';
+  return 'var(--red)';
+}
+
+function signalClass(sig) {
+  if (!sig) return 'na';
+  const l = sig.toLowerCase();
+  if (l.includes('bull') || l.includes('long') || l.includes('buy')) return 'bullish';
+  if (l.includes('bear') || l.includes('short') || l.includes('sell')) return 'bearish';
+  return 'neutral';
+}
+
+// ── Selection ──────────────────────────────────────
+function toggleSelect(symbol, checked) {
+  if (checked) selectedSymbols.add(symbol);
+  else selectedSymbols.delete(symbol);
+  updateSelectedCount();
+  // Update card style
+  const cards = document.querySelectorAll('.asset-card');
+  cards.forEach(c => {
+    if (c.dataset.symbol === symbol) c.classList.toggle('selected', checked);
+  });
+}
+
+function selectAll() {
+  const cls = document.getElementById('filter-class').value;
+  allAssets.forEach(a => {
+    if (cls === 'all' || a.asset_class === cls) selectedSymbols.add(a.symbol);
+  });
+  updateSelectedCount();
+  applyFilters();
+}
+
+function selectNone() {
+  selectedSymbols.clear();
+  updateSelectedCount();
+  applyFilters();
+}
+
+function updateSelectedCount() {
+  document.getElementById('count-selected').textContent = selectedSymbols.size;
+}
+
+// ── Analyze ────────────────────────────────────────
+async function analyzeSingle(symbol) {
+  const btn = event.target.closest('.btn');
+  if (btn) { btn.classList.add('loading'); btn.disabled = true; }
+  try {
+    const data = await apiFetch('/analyze', {
+      method: 'POST',
+      body: JSON.stringify({symbols:[symbol], run_cnn:true, run_ruby:true, run_indicators:true, run_news:true}),
+    });
+    if (data.results && data.results.length > 0) {
+      analysisCache[symbol] = data.results[0];
+      toast('Analysis complete for ' + symbol, 'success');
+      applyFilters();
+      showAnalysis(symbol);
+    }
+  } catch(e) { /* toast already shown */ }
+  finally { if (btn) { btn.classList.remove('loading'); btn.disabled = false; } }
+}
+
+async function analyzeSelected() {
+  const syms = Array.from(selectedSymbols);
+  if (!syms.length) { toast('No assets selected', 'error'); return; }
+  const btn = document.getElementById('btn-analyze-sel');
+  btn.classList.add('loading'); btn.disabled = true;
+  try {
+    const data = await apiFetch('/analyze', {
+      method: 'POST',
+      body: JSON.stringify({symbols:syms, run_cnn:true, run_ruby:true, run_indicators:true, run_news:true}),
+    });
+    (data.results || []).forEach(r => { analysisCache[r.symbol] = r; });
+    toast(`Analyzed ${(data.results||[]).length} assets`, 'success');
+    applyFilters();
+  } catch(e) { /* toast already shown */ }
+  finally { btn.classList.remove('loading'); btn.disabled = false; }
+}
+
+// ── Analysis Panel ─────────────────────────────────
+function showAnalysis(symbol) {
+  const data = analysisCache[symbol];
+  if (!data) { toast('No analysis data for ' + symbol, 'error'); return; }
+
+  const container = document.getElementById('analysis-panel-container');
+  const content = document.getElementById('ap-content');
+  document.getElementById('ap-title').textContent = symbol + ' Analysis';
+
+  const score = data.overall_score ?? 50;
+  const circumference = 2 * Math.PI * 42;
+  const offset = circumference - (score / 100) * circumference;
+  const sColor = scoreColor(score);
+
+  let indicatorHtml = '';
+  if (data.indicators && typeof data.indicators === 'object') {
+    const entries = Object.entries(data.indicators).slice(0, 12);
+    indicatorHtml = '<div class="indicator-grid">' + entries.map(([k,v]) =>
+      `<div class="ind-item"><div class="ind-label">${k}</div><div class="ind-val">${typeof v === 'number' ? v.toFixed(4) : v}</div></div>`
+    ).join('') + '</div>';
+  }
+
+  let errorsHtml = '';
+  if (data.errors && data.errors.length > 0) {
+    errorsHtml = '<div class="analysis-errors"><strong>Partial results:</strong> ' + data.errors.join('; ') + '</div>';
+  }
+
+  content.innerHTML = `
+    <div class="score-ring">
+      <svg viewBox="0 0 100 100">
+        <circle class="track" cx="50" cy="50" r="42"/>
+        <circle class="fill" cx="50" cy="50" r="42"
+          stroke="${sColor}"
+          stroke-dasharray="${circumference}"
+          stroke-dashoffset="${offset}"/>
+      </svg>
+      <div class="score-label">
+        <div class="score-val" style="color:${sColor}">${score.toFixed(0)}</div>
+        <div class="score-sub">Score</div>
+      </div>
+    </div>
+
+    <div class="signal-rows">
+      <div class="signal-row">
+        <span class="signal-row-label">🧠 CNN Signal</span>
+        <span class="signal-row-value ${signalClass(data.cnn_signal)}">${data.cnn_signal || 'N/A'}${data.cnn_confidence ? ' (' + (data.cnn_confidence * 100).toFixed(1) + '%)' : ''}</span>
+      </div>
+      <div class="signal-row">
+        <span class="signal-row-label">💎 Ruby Signal</span>
+        <span class="signal-row-value ${signalClass(data.ruby_signal)}">${data.ruby_signal || 'N/A'}</span>
+      </div>
+      <div class="signal-row">
+        <span class="signal-row-label">📰 News Sentiment</span>
+        <span class="signal-row-value ${data.news_sentiment > 0 ? 'bullish' : data.news_sentiment < 0 ? 'bearish' : 'neutral'}">${data.news_sentiment != null ? data.news_sentiment.toFixed(4) : 'N/A'}${data.news_signal ? ' · ' + data.news_signal : ''}</span>
+      </div>
+      <div class="signal-row">
+        <span class="signal-row-label">📊 Indicator Alignment</span>
+        <span class="signal-row-value" style="color:${data.indicator_alignment >= 60 ? 'var(--green)' : data.indicator_alignment >= 40 ? 'var(--amber)' : 'var(--red)'}">${data.indicator_alignment != null ? data.indicator_alignment.toFixed(1) + '%' : 'N/A'}</span>
+      </div>
+    </div>
+
+    ${data.bars_loaded ? '<div style="font-size:10px;color:var(--dim);text-align:center">' + (data.bar_count||0) + ' bars loaded · Change: ' + (data.daily_change_pct != null ? data.daily_change_pct.toFixed(2)+'%' : 'N/A') + '</div>' : ''}
+
+    ${indicatorHtml}
+    ${errorsHtml}
+
+    <div style="font-size:9px;color:var(--muted);text-align:center;margin-top:4px">
+      Analyzed ${data.analyzed_at ? new Date(data.analyzed_at).toLocaleTimeString() : 'unknown'}
+    </div>
+  `;
+
+  container.classList.remove('hidden');
+}
+
+function closeAnalysisPanel() {
+  document.getElementById('analysis-panel-container').classList.add('hidden');
+}
+
+// ── Start Monitoring ───────────────────────────────
+async function startMonitoring() {
+  const syms = Array.from(selectedSymbols);
+  if (!syms.length) { toast('No assets selected', 'error'); return; }
+  const btn = document.getElementById('btn-monitor');
+  btn.classList.add('loading'); btn.disabled = true;
+  try {
+    await apiFetch('/select', {
+      method: 'POST',
+      body: JSON.stringify({symbols: syms}),
+    });
+    toast(`Monitoring ${syms.length} assets`, 'success');
+    startWatchlistPolling();
+  } catch(e) { /* toast already shown */ }
+  finally { btn.classList.remove('loading'); btn.disabled = false; }
+}
+
+// ── Watchlist ──────────────────────────────────────
+function startWatchlistPolling() {
+  if (watchlistInterval) clearInterval(watchlistInterval);
+  refreshWatchlist();
+  watchlistInterval = setInterval(refreshWatchlist, 2000);
+}
+
+async function refreshWatchlist() {
+  try {
+    const data = await fetch(API + '/watchlist').then(r => r.json());
+    renderWatchlist(data.items || []);
+  } catch(e) { /* silent */ }
+}
+
+function renderWatchlist(items) {
+  const body = document.getElementById('watchlist-body');
+  if (!items.length) {
+    body.innerHTML = '<div class="wl-empty">No assets in watchlist — select assets and click "Start Monitoring"</div>';
+    return;
+  }
+
+  body.innerHTML = `
+  <table class="wl-table">
+    <thead>
+      <tr>
+        <th>Symbol</th>
+        <th>Price</th>
+        <th>Change</th>
+        <th>Signals</th>
+        <th>Score</th>
+        <th>Sim P&L</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${items.map(it => {
+        const price = it.price != null ? formatPrice(it.price, it.symbol) : '—';
+        const ch = it.daily_change_pct;
+        const chClass = ch > 0 ? 'up' : ch < 0 ? 'down' : '';
+        const chStr = ch != null ? (ch > 0 ? '+' : '') + ch.toFixed(2) + '%' : '—';
+        const sig = it.signals || {};
+        const score = sig.overall_score;
+        const pnl = it.sim_position ? it.sim_position.unrealized_pnl : null;
+
+        const sigBadges = [
+          sig.cnn ? `<span class="wl-sig ${signalClass(sig.cnn) === 'bullish' ? 'bull' : signalClass(sig.cnn) === 'bearish' ? 'bear' : 'neut'}">${sig.cnn}</span>` : '',
+          sig.ruby ? `<span class="wl-sig ${signalClass(sig.ruby) === 'bullish' ? 'bull' : signalClass(sig.ruby) === 'bearish' ? 'bear' : 'neut'}">${sig.ruby}</span>` : '',
+          sig.news ? `<span class="wl-sig ${signalClass(sig.news) === 'bullish' ? 'bull' : signalClass(sig.news) === 'bearish' ? 'bear' : 'neut'}">${sig.news}</span>` : '',
+        ].filter(Boolean).join('') || '<span style="color:var(--muted);font-size:10px">—</span>';
+
+        return `<tr>
+          <td class="wl-sym">${it.symbol}</td>
+          <td class="wl-price">${price}</td>
+          <td class="wl-change ${chClass}">${chStr}</td>
+          <td><div class="wl-signal-cell">${sigBadges}</div></td>
+          <td class="wl-score" style="color:${score != null ? scoreColor(score) : 'var(--muted)'}">${score != null ? score.toFixed(0) : '—'}</td>
+          <td class="wl-pnl ${pnl > 0 ? 'pos' : pnl < 0 ? 'neg' : ''}">${pnl != null ? (pnl >= 0 ? '+' : '') + '$' + pnl.toFixed(2) : '—'}</td>
+        </tr>`;
+      }).join('')}
+    </tbody>
+  </table>`;
+}
+
+// ── Status ─────────────────────────────────────────
+function updateStatus(ok) {
+  const dot = document.getElementById('status-dot');
+  const lbl = document.getElementById('status-label');
+  dot.className = 'sdot ' + (ok ? 'ok' : 'off');
+  lbl.textContent = ok ? 'connected' : 'disconnected';
+}
+
+// ── Init ───────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  loadAssets();
+  loadSelected();
+});
+</script>
+</body>
+</html>

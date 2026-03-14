@@ -1,0 +1,661 @@
+// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © nuniesmith — Ruby: Top G Channel + Range Breakouts + Wave Analysis + Quality Score
+
+//@version=6
+indicator("Ruby", shorttitle="Ruby", overlay=true,
+     max_boxes_count=100, max_lines_count=500, max_labels_count=500)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 1. SETTINGS
+// ══════════════════════════════════════════════════════════════════════════════
+
+var g1 = "⚙️ Strategy"
+biasMode      = input.string("Auto",  "Session Bias",
+     options=["Auto","Long Only","Short Only"],       group=g1)
+requireVWAP   = input.bool(true,  "Require VWAP Alignment",         group=g1)
+orbMinutes    = input.int(5,      "ORB Minutes", minval=1, maxval=120, group=g1)
+volMult       = input.float(1.2,  "Volume Spike ×",  minval=0.8, step=0.05, group=g1)
+minQualityPct = input.int(45,     "Min Quality %",   minval=30,  maxval=95,  group=g1)
+htfTF         = input.string("3", "HTF Timeframe",
+     options=["3","5","10","15","30","60"],           group=g1)
+tp1R          = input.float(1.5,  "TP1 (R ×)",       minval=0.5, step=0.25, group=g1)
+tp2R          = input.float(2.5,  "TP2 (R ×)",       minval=1.0, step=0.25, group=g1)
+tp3R          = input.float(4.0,  "TP3 (R ×)",       minval=2.0, step=0.5,  group=g1)
+sessionHours  = input.string("0000-0000", "Session Hours (RTH)",
+     tooltip="HHMM-HHMM in the exchange timezone. Set to 0000-0000 and disable session filter for 24/7 assets (crypto, forex).",
+     group=g1)
+useSession    = input.bool(true,  "Use Session Filter",
+     tooltip="Disable for 24/7 markets — crypto, FX, or any asset without a fixed session.",
+     group=g1)
+ibMinutes     = input.int(60,     "IB Minutes",      minval=15, maxval=480, group=g1)
+
+var g2 = "📊 Top G Channel"
+topGLen            = input.int(50,   "Channel Length",         minval=10,          group=g2)
+showMid            = input.bool(true,"Show Mid Line",                              group=g2)
+sigSens            = input.float(0.5,"Signal Sensitivity",     minval=0.1, maxval=2.0, step=0.1, group=g2)
+showTGDots         = input.bool(true, "Show Strong TG Dots",                       group=g2)
+showSimpleDots     = input.bool(true, "Show Simple Touch Dots",                    group=g2)
+showPotDots        = input.bool(false,"Show Potential Zone Dots",                  group=g2)
+showBreakoutLabels = input.bool(true, "Show Breakout Entry Labels",                group=g2)
+
+var g3 = "🎨 Display"
+showVWAP        = input.bool(true,  "Show VWAP",          group=g3)
+showEMA9        = input.bool(true,  "Show EMA9",          group=g3)
+showDash        = input.bool(true,  "Show Dashboard",     group=g3)
+showEntryLabels = input.bool(true,  "Show Entry Labels",  group=g3)
+dashPos_str     = input.string("Top Right", "Dashboard Position",
+     options=["Top Right","Bottom Right","Top Left","Bottom Left"], group=g3)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 2. CORE INDICATORS
+// ══════════════════════════════════════════════════════════════════════════════
+ema9   = ta.ema(close, 9)
+vwap   = ta.vwap(hlc3)
+atr14  = ta.atr(14)
+volAvg = ta.sma(volume, 20)
+ao     = ta.sma(hl2, 5) - ta.sma(hl2, 34)    // Awesome Oscillator
+rsi14  = ta.rsi(close, 14)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 3. TOP G CHANNEL
+// ══════════════════════════════════════════════════════════════════════════════
+tg_lo    = ta.lowest (low,  topGLen)
+tg_hi    = ta.highest(high, topGLen)
+tg_mid   = ta.hma(math.avg(tg_lo, tg_hi), 15)
+tg_range = tg_hi - tg_lo
+
+// Normalised rate-of-change for momentum confirmation
+roc8     = ta.roc(close, 8)
+roc8_std = ta.stdev(roc8, 200)
+roc_norm = roc8_std > 0 ? roc8 / roc8_std : 0.0
+
+// ── Strong signals (entry-grade) ─────────────────────────────────────────────
+// Strong bounce: two consecutive bars at channel low + momentum exhaustion
+strong_bot = low[1] == tg_lo[1] and low > tg_lo and low[2] == tg_lo[2] and
+             roc_norm[2] < -2 * sigSens and barstate.isconfirmed
+
+// Strong rejection: fell off resistance + support flat for 5 bars + roc > 2σ
+strong_top = high < tg_hi and high[1] == tg_hi[1] and
+             roc_norm[2] > 2 * sigSens and tg_lo == tg_lo[5] and barstate.isconfirmed
+
+// ── Simple signals (visual marker only — NOT an entry) ──────────────────────
+simple_bot = low[1]  == tg_lo[1] and low  > tg_lo and not strong_bot and barstate.isconfirmed
+simple_top = high[1] == tg_hi[1] and high < tg_hi and not strong_top and barstate.isconfirmed
+
+// ── Potential / early-warning — price entering channel zone with momentum ────
+bool pot_bot = low  <= tg_lo + atr14 * 0.5 and roc_norm < -1 * sigSens and barstate.isconfirmed
+bool pot_top = high >= tg_hi - atr14 * 0.5 and roc_norm >  1 * sigSens and barstate.isconfirmed
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 4. WAVE ANALYSIS  (from Ruby)
+// Tracks bull / bear wave amplitudes → wave ratio + current momentum
+// ══════════════════════════════════════════════════════════════════════════════
+dyn_ema = ta.ema(close, 20)
+
+var float speed     = 0.0
+c_rma = ta.rma(close, 10)
+o_rma = ta.rma(open,  10)
+
+var int   wx1        = na
+var array<float> bull_waves = array.new<float>()
+var array<float> bear_waves = array.new<float>()
+
+if na(wx1)
+    wx1 := bar_index
+
+int   wave_lkbk = math.max(1, bar_index - nz(wx1, bar_index))
+float speed_lo  = ta.lowest( speed, wave_lkbk)
+float speed_hi  = ta.highest(speed, wave_lkbk)
+
+// Record wave amplitude on each EMA crossover
+if close > dyn_ema and close[1] <= dyn_ema
+    array.unshift(bear_waves, speed_lo)
+    if array.size(bear_waves) > 200
+        array.pop(bear_waves)
+    wx1   := bar_index
+    speed := c_rma - o_rma
+
+if close < dyn_ema and close[1] >= dyn_ema
+    array.unshift(bull_waves, speed_hi)
+    if array.size(bull_waves) > 200
+        array.pop(bull_waves)
+    wx1   := bar_index
+    speed := c_rma - o_rma
+
+speed      := speed + (c_rma - o_rma)
+trendspeed  = ta.hma(speed, 5)
+
+var float wave_ratio = 1.0
+var float dom_val    = 0.0
+var string mkt_bias  = "Neutral"
+var float bull_avg   = 0.0001
+var float bear_avg_v = 0.0001   // absolute value of bear average
+
+if barstate.isconfirmed
+    if array.size(bull_waves) > 0
+        bull_avg := array.avg(bull_waves)
+    if array.size(bear_waves) > 0
+        bear_avg_v := math.abs(array.avg(bear_waves))
+    wave_ratio := bear_avg_v == 0 ? 1.0 : bull_avg / bear_avg_v
+    dom_val    := bull_avg - bear_avg_v
+    mkt_bias   := dom_val > 0 ? "Bullish" : dom_val < 0 ? "Bearish" : "Neutral"
+
+// Current bar momentum vs historical average (positive = bullish)
+cur_ratio = speed > 0
+     ? (bull_avg   > 0 ? speed             / bull_avg   :  1.0)
+     : (bear_avg_v > 0 ? math.abs(speed)   / bear_avg_v * -1.0 : -1.0)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 5. MARKET REGIME + PHASE
+// ══════════════════════════════════════════════════════════════════════════════
+ma_200    = ta.sma(close, 200)
+avg_chg   = ta.sma(math.abs(ta.change(ma_200)), 100)
+slope_n   = avg_chg == 0 ? 0.0 : (ma_200 - nz(ma_200[20], ma_200)) / (avg_chg * 20)
+ret_s     = ta.stdev(ta.change(close) / nz(close[1], close), 100)
+ret_sma   = ta.sma(ret_s, 50)
+vol_n     = ret_sma == 0 ? 1.0 : ret_s / ret_sma
+
+market_regime = slope_n >  1.0 ? "TRENDING ↑" : slope_n < -1.0 ? "TRENDING ↓" : vol_n   >  1.5 ? "VOLATILE"   : vol_n   <  0.8 ? "RANGING"    : "NEUTRAL"
+
+var string market_phase = "NEUTRAL"
+var color  phase_col    = color.gray
+
+if ta.crossover(close, tg_hi[10]) and ao > 0
+    market_phase := "UPTREND"
+    phase_col    := color.lime
+if ta.crossunder(close, tg_lo[10]) and ao < 0
+    market_phase := "DOWNTREND"
+    phase_col    := color.red
+if close > tg_hi[5] and close < tg_hi and ao > 0 and ao < ao[10]
+    market_phase := "DISTRIB"
+    phase_col    := color.orange
+if close < tg_lo[5] and close > tg_lo and ao < 0 and ao > ao[10]
+    market_phase := "ACCUM"
+    phase_col    := color.yellow
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 6. VOLATILITY PERCENTILE
+// ══════════════════════════════════════════════════════════════════════════════
+var array<float> vol_arr = array.new<float>(200, 0.0)
+
+if barstate.isconfirmed
+    array.push(vol_arr, nz(atr14, 0.0))
+    if array.size(vol_arr) > 200
+        array.shift(vol_arr)
+
+float vol_pct = 0.5
+if barstate.isconfirmed and array.size(vol_arr) > 1
+    int cnt = 0
+    float cur_atr = nz(atr14, 0.0)
+    for i = 0 to array.size(vol_arr) - 1
+        if array.get(vol_arr, i) < cur_atr
+            cnt += 1
+    vol_pct := cnt / array.size(vol_arr)
+
+vol_regime = vol_pct >= 0.8 ? "VERY HIGH" :
+             vol_pct >= 0.6 ? "HIGH"      :
+             vol_pct <= 0.2 ? "VERY LOW"  :
+             vol_pct <= 0.4 ? "LOW"       : "MED"
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 7. SESSION BIAS + ORB
+// ══════════════════════════════════════════════════════════════════════════════
+newDay = ta.change(time("D")) != 0
+// Session filter — set Session Hours in settings, or disable entirely for 24/7 assets
+inRTH  = not useSession or not na(time("1", sessionHours))
+
+// 3-min HTF by default — fast enough to catch 1-min moves while filtering noise
+htTrend  = request.security(syminfo.tickerid, htfTF,
+     close > ta.ema(close, 9) ? 1 : -1, lookahead=barmerge.lookahead_off)
+
+bullBias = biasMode == "Long Only" or
+           (biasMode == "Auto" and
+            (close > vwap ? 1 : 0) + (ao > 0 ? 1 : 0) + (htTrend == 1 ? 1 : 0) >= 2)
+
+// ── ORB ──────────────────────────────────────────────────────────────────────
+var float rHigh      = na
+var float rLow       = na
+var bool  rangeReady = false
+
+bool cross_hi = ta.crossover (high, nz(rHigh))
+bool cross_lo = ta.crossunder(low,  nz(rLow))
+
+if newDay
+    rHigh      := na
+    rLow       := na
+    rangeReady := false
+
+int barsSinceOpen = ta.barssince(newDay)
+if barsSinceOpen * timeframe.multiplier <= orbMinutes and inRTH
+    rHigh := math.max(nz(rHigh, high), high)
+    rLow  := math.min(nz(rLow,  low),  low)
+else if not rangeReady and not na(rHigh)
+    rangeReady := true
+
+orbBreakUp = rangeReady and cross_hi and     bullBias
+orbBreakDn = rangeReady and cross_lo and not bullBias
+
+// ── True-ORB windows — 30 min after each major session open ──────────────────
+// These use the chart's exchange timezone.  Adjust times if your instrument
+// sits on a different exchange clock (e.g. CME = CT, subtract 1 h from ET).
+//   New York RTH  09:30 ET  →  use "0930-1000"
+//   London open   08:00 GMT →  use "0300-0330" on US-exchange charts (ET)
+//   Asia / Tokyo  09:00 JST →  use "1800-1830" on US-exchange charts (ET)
+bool orbWindow = not na(time("1", "0930-1000")) or
+                 not na(time("1", "0300-0330")) or
+                 not na(time("1", "1800-1830"))
+
+// ── Previous-Day H/L  (auto) ─────────────────────────────────────────────────
+var float pdHigh = na
+var float pdLow  = na
+if newDay
+    pdHigh := high[1]
+    pdLow  := low[1]
+else
+    pdHigh := nz(pdHigh, high)
+    pdLow  := nz(pdLow,  low)
+
+// ── Initial Balance 60-min  (auto) ───────────────────────────────────────────
+var float ibHigh = na
+var float ibLow  = na
+var int   ibBars = 0
+var bool  ibDone = false
+
+if newDay
+    ibHigh := high
+    ibLow  := low
+    ibBars := 0
+    ibDone := false
+
+if not ibDone and inRTH
+    ibBars += 1
+    ibHigh := math.max(ibHigh, high)
+    ibLow  := math.min(ibLow,  low)
+    if ibBars * timeframe.multiplier >= ibMinutes and barstate.isconfirmed
+        ibDone := true
+
+// ── Squeeze Detection  (auto) ────────────────────────────────────────────────
+bb_u = ta.sma(close, 20) + 2.0 * ta.stdev(close, 20)
+bb_l = ta.sma(close, 20) - 2.0 * ta.stdev(close, 20)
+kc_u = ta.sma(close, 20) + ta.atr(20) * 1.5
+kc_l = ta.sma(close, 20) - ta.atr(20) * 1.5
+sqz_on    = bb_l > kc_l and bb_u < kc_u
+sqz_fired = sqz_on[1] and not sqz_on
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 8. QUALITY SCORE  (0 – 100)
+// ══════════════════════════════════════════════════════════════════════════════
+quality = 0.0
+quality += (bullBias and ao > ao[1])       or (not bullBias and ao < ao[1])       ? 20.0 : 0.0
+quality += (close > ema9 and bullBias)     or (close < ema9 and not bullBias)     ? 15.0 : 0.0
+quality += (bullBias and close > vwap)     or (not bullBias and close < vwap)     ? 20.0 : 0.0
+quality += volume > volAvg * volMult                                               ? 25.0 : 0.0
+quality += rangeReady and ((bullBias and close > rHigh) or
+           (not bullBias and close < rLow))                                        ? 20.0 : 0.0
+quality := math.min(100.0, math.max(0.0, quality))
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 9. MAIN SIGNALS
+// Long  = strong TG bounce  + bullBias + AO+ + vol spike + quality ≥ threshold
+// Short = strong TG reject  + bearBias + AO- + vol spike + quality ≥ threshold
+// ══════════════════════════════════════════════════════════════════════════════
+volOK  = volume > volAvg * volMult
+vwapL  = not requireVWAP or close > vwap
+vwapS  = not requireVWAP or close < vwap
+qualOK = quality >= minQualityPct
+
+bool longSignal_raw  = strong_bot and  bullBias and ao > 0 and volOK and vwapL and qualOK and barstate.isconfirmed
+bool shortSignal_raw = strong_top and not bullBias and ao < 0 and volOK and vwapS and qualOK and barstate.isconfirmed
+
+// 5-bar cooldown to avoid repeated signals on the same move
+var int lastLong  = 0
+var int lastShort = 0
+bool longSignal  = longSignal_raw  and (bar_index - lastLong  > 5)
+bool shortSignal = shortSignal_raw and (bar_index - lastShort > 5)
+
+if longSignal
+    lastLong  := bar_index
+if shortSignal
+    lastShort := bar_index
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 10. ENTRY · SL · TP LEVELS
+// SL = 1 ATR beyond the signal candle's wick
+// TP levels are multiples of 1R (risk = Entry – SL)
+// ══════════════════════════════════════════════════════════════════════════════
+
+// Long levels (captured on signal bar)
+l_entry = close
+l_sl    = low  - atr14
+l_risk  = l_entry - l_sl
+l_tp1   = l_entry + l_risk * tp1R
+l_tp2   = l_entry + l_risk * tp2R
+l_tp3   = l_entry + l_risk * tp3R
+
+// Short levels
+s_entry = close
+s_sl    = high + atr14
+s_risk  = s_sl - s_entry
+s_tp1   = s_entry - s_risk * tp1R
+s_tp2   = s_entry - s_risk * tp2R
+s_tp3   = s_entry - s_risk * tp3R
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 11. BAR COLOURING — weather heatmap
+// Above regression line → yellow → red (hot)
+// Below regression line → aqua  → yellow (cold)
+// ══════════════════════════════════════════════════════════════════════════════
+reg_line   = ta.linreg(hl2, topGLen, 0)
+dev_series = close - reg_line
+dev_std    = ta.stdev(dev_series, 200)
+clvl       = dev_std == 0 ? 0.0 : dev_series / dev_std
+clvl       := math.max(math.min(clvl, 5), -5)
+heat_col   = clvl > 0
+     ? color.from_gradient(clvl, 0,
+          math.max(ta.highest(clvl, 70), 0.0001), color.yellow, color.red)
+     : color.from_gradient(clvl,
+          math.min(ta.lowest (clvl, 70), -0.0001), 0, color.aqua, color.yellow)
+barcolor(heat_col)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 12. PLOTS
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ── ORB zone ─────────────────────────────────────────────────────────────────
+pOrbHi = plot(rangeReady ? rHigh : na, "ORB High", color.new(#2962FF, 0), 2)
+pOrbLo = plot(rangeReady ? rLow  : na, "ORB Low",  color.new(#2962FF, 0), 2)
+fill(pOrbHi, pOrbLo, color.new(#2962FF, 85), title="ORB Zone")
+
+// ── Top G channel ─────────────────────────────────────────────────────────────
+plot(tg_hi,                    "TG Resistance", color.new(#ff1100, 50), 1, plot.style_linebr)
+plot(tg_lo,                    "TG Support",    color.new(#00ffbb, 50), 1, plot.style_linebr)
+plot(showMid ? tg_mid : na,    "TG Mid",        color.new(color.gray, 75), 1, plot.style_linebr)
+
+// ── Core overlays ─────────────────────────────────────────────────────────────
+plot(showVWAP ? vwap : na, "VWAP", color.new(#FF00FF, 0), 2)
+plot(showEMA9 ? ema9 : na, "EMA9", color.new(#00BFFF, 0), 2)
+
+// ── Auto key levels ───────────────────────────────────────────────────────────
+plot(pdHigh,              "PD High",  color.new(color.blue,   60), 1, plot.style_stepline)
+plot(pdLow,               "PD Low",   color.new(color.purple, 60), 1, plot.style_stepline)
+plot(ibDone ? ibHigh : na,"IB High",  color.new(color.aqua,   55), 1, plot.style_linebr)
+plot(ibDone ? ibLow  : na,"IB Low",   color.new(color.orange, 55), 1, plot.style_linebr)
+
+// ── Background tint (bullish / bearish bias) ──────────────────────────────────
+bgcolor(close > ema9 and ao > 0 ? color.new(color.lime, 96) :
+        close < ema9 and ao < 0 ? color.new(color.red,  96) : na)
+
+// ── Entry zones — bottom / top 10 % of TG channel ────────────────────────────
+if barstate.islast and tg_range > 0
+    var box sup_box = box.new(bar_index[20], tg_lo + tg_range * 0.1, bar_index, tg_lo,
+         bgcolor=color.new(color.teal, 88), border_color=color.new(color.green, 55))
+    var box res_box = box.new(bar_index[20], tg_hi, bar_index, tg_hi - tg_range * 0.1,
+         bgcolor=color.new(color.red,  90), border_color=color.new(color.red,   55))
+    box.set_right( sup_box, bar_index)
+    box.set_top(   sup_box, tg_lo + tg_range * 0.1)
+    box.set_bottom(sup_box, tg_lo)
+    box.set_right( res_box, bar_index)
+    box.set_top(   res_box, tg_hi)
+    box.set_bottom(res_box, tg_hi - tg_range * 0.1)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 13. AUTO BREAKOUT MARKERS
+// ── ORB label only within 30 min of NY / London / Asia opens; else RB ─────────
+// ══════════════════════════════════════════════════════════════════════════════
+plotshape(orbBreakUp  and     orbWindow, "ORB ↑",  shape.triangleup,   location.belowbar, color.new(color.lime, 0), size=size.small, text="ORB")
+plotshape(orbBreakUp  and not orbWindow, "RB ↑",   shape.triangleup,   location.belowbar, color.new(color.lime, 0), size=size.small, text="RB")
+plotshape(orbBreakDn  and     orbWindow, "ORB ↓",  shape.triangledown, location.abovebar, color.new(color.red,  0), size=size.small, text="ORB")
+plotshape(orbBreakDn  and not orbWindow, "RB ↓",   shape.triangledown, location.abovebar, color.new(color.red,  0), size=size.small, text="RB")
+plotshape(sqz_fired,          "Squeeze", shape.diamond,      location.belowbar, color.new(color.yellow, 0), size=size.small, text="SQZ")
+
+// ── Top G channel dot signals — green = support, red = resistance ───────────
+plotshape(showTGDots     and strong_bot, "TG Bounce",             shape.circle,  location.belowbar, color.new(#00ffbb,  0), size=size.normal)
+plotshape(showTGDots     and strong_top, "TG Rejection",          shape.circle,  location.abovebar, color.new(#ff1100,  0), size=size.normal)
+plotshape(showSimpleDots and simple_bot, "TG Simple Support",     shape.circle,  location.belowbar, color.new(#00ffbb, 50), size=size.small)
+plotshape(showSimpleDots and simple_top, "TG Simple Resistance",  shape.circle,  location.abovebar, color.new(#ff1100, 50), size=size.small)
+plotshape(showPotDots    and pot_bot,    "TG Potential Support",  shape.diamond, location.belowbar, color.new(#00ffbb, 70), size=size.tiny)
+plotshape(showPotDots    and pot_top,    "TG Potential Resist",   shape.diamond, location.abovebar, color.new(#ff1100, 70), size=size.tiny)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 14. SIGNAL SHAPES + LABELS  (Entry · SL · TP1 · TP2 · TP3)
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ── Full-filter confirmed signals — large triangle (trade-ready setup) ────────
+plotshape(longSignal,  "Long",  shape.triangleup,   location.belowbar, color.new(color.green, 0), size=size.large)
+plotshape(shortSignal, "Short", shape.triangledown, location.abovebar, color.new(color.red,   0), size=size.large)
+
+// ── Line-set trackers — cleared on each new signal to avoid clutter ───────────
+var array<line> l_sig_lines = array.new<line>()
+var array<line> s_sig_lines = array.new<line>()
+var array<line> l_bo_lines  = array.new<line>()
+var array<line> s_bo_lines  = array.new<line>()
+
+// ── Labels on every TG dot (strong_bot / strong_top) ─────────────────────────
+if showEntryLabels
+    if strong_bot
+        label.new(bar_index, low - atr14,
+             "LONG 📈" +
+             "\nEntry : " + str.tostring(l_entry, format.mintick) +
+             "\nSL    : " + str.tostring(l_sl,    format.mintick) +
+             "\nTP 1  : " + str.tostring(l_tp1,   format.mintick) + "  (" + str.tostring(tp1R, "#.#") + "R)" +
+             "\nTP 2  : " + str.tostring(l_tp2,   format.mintick) + "  (" + str.tostring(tp2R, "#.#") + "R)" +
+             "\nTP 3  : " + str.tostring(l_tp3,   format.mintick) + "  (" + str.tostring(tp3R, "#.#") + "R)" +
+             "\nQual  : " + str.tostring(math.round(quality)) + "%" +
+             "\nWave  : " + str.tostring(math.round(math.abs(cur_ratio), 2)) + "x" +
+             "\n"         + market_regime,
+             color=color.new(color.green, 20), style=label.style_label_up,
+             textcolor=color.white, size=size.normal)
+
+    if strong_top
+        label.new(bar_index, high + atr14,
+             "SHORT 📉" +
+             "\nEntry : " + str.tostring(s_entry, format.mintick) +
+             "\nSL    : " + str.tostring(s_sl,    format.mintick) +
+             "\nTP 1  : " + str.tostring(s_tp1,   format.mintick) + "  (" + str.tostring(tp1R, "#.#") + "R)" +
+             "\nTP 2  : " + str.tostring(s_tp2,   format.mintick) + "  (" + str.tostring(tp2R, "#.#") + "R)" +
+             "\nTP 3  : " + str.tostring(s_tp3,   format.mintick) + "  (" + str.tostring(tp3R, "#.#") + "R)" +
+             "\nQual  : " + str.tostring(math.round(quality)) + "%" +
+             "\nWave  : " + str.tostring(math.round(math.abs(cur_ratio), 2)) + "x" +
+             "\n"         + market_regime,
+             color=color.new(color.red, 20), style=label.style_label_down,
+             textcolor=color.white, size=size.normal)
+
+// ── TP / SL guide lines — cleared on next signal so chart stays clean ─────────
+if strong_bot
+    // Remove previous long signal lines
+    int _lsl_size = array.size(l_sig_lines)
+    if _lsl_size > 0
+        for _i = 0 to _lsl_size - 1
+            line.delete(array.get(l_sig_lines, _i))
+    array.clear(l_sig_lines)
+    array.push(l_sig_lines, line.new(bar_index, l_tp1, bar_index + 25, l_tp1, color=color.new(color.lime,  35), style=line.style_dashed))
+    array.push(l_sig_lines, line.new(bar_index, l_tp2, bar_index + 25, l_tp2, color=color.new(color.green, 35), style=line.style_dashed))
+    array.push(l_sig_lines, line.new(bar_index, l_tp3, bar_index + 25, l_tp3, color=color.new(color.teal,  35), style=line.style_dashed))
+    array.push(l_sig_lines, line.new(bar_index, l_sl,  bar_index + 25, l_sl,  color=color.new(color.red,   45), style=line.style_dashed))
+
+if strong_top
+    // Remove previous short signal lines
+    int _ssl_size = array.size(s_sig_lines)
+    if _ssl_size > 0
+        for _i = 0 to _ssl_size - 1
+            line.delete(array.get(s_sig_lines, _i))
+    array.clear(s_sig_lines)
+    array.push(s_sig_lines, line.new(bar_index, s_tp1, bar_index + 25, s_tp1, color=color.new(color.red,    35), style=line.style_dashed))
+    array.push(s_sig_lines, line.new(bar_index, s_tp2, bar_index + 25, s_tp2, color=color.new(color.orange, 35), style=line.style_dashed))
+    array.push(s_sig_lines, line.new(bar_index, s_tp3, bar_index + 25, s_tp3, color=color.new(color.maroon, 35), style=line.style_dashed))
+    array.push(s_sig_lines, line.new(bar_index, s_sl,  bar_index + 25, s_sl,  color=color.new(color.lime,   45), style=line.style_dashed))
+
+// ── Breakout entry labels — ORB or RB depending on session window ─────────────
+// Colours and size now match the main LONG / SHORT labels for easy reading.
+if showBreakoutLabels
+    if orbBreakUp
+        float _bo_sl   = rLow - atr14
+        float _bo_risk = close - _bo_sl
+        string _bo_tag = orbWindow ? "LONG ORB 🚀" : "LONG RB 🚀"
+        // Remove previous long breakout lines
+        int _lbl_size = array.size(l_bo_lines)
+        if _lbl_size > 0
+            for _i = 0 to _lbl_size - 1
+                line.delete(array.get(l_bo_lines, _i))
+        array.clear(l_bo_lines)
+        label.new(bar_index, low - atr14 * 1.8,
+             _bo_tag +
+             "\nEntry : " + str.tostring(close,                    format.mintick) +
+             "\nSL    : " + str.tostring(_bo_sl,                   format.mintick) +
+             "\nTP 1  : " + str.tostring(close + _bo_risk * tp1R,  format.mintick) + "  (" + str.tostring(tp1R, "#.#") + "R)" +
+             "\nTP 2  : " + str.tostring(close + _bo_risk * tp2R,  format.mintick) + "  (" + str.tostring(tp2R, "#.#") + "R)" +
+             "\nTP 3  : " + str.tostring(close + _bo_risk * tp3R,  format.mintick) + "  (" + str.tostring(tp3R, "#.#") + "R)" +
+             "\nQual  : " + str.tostring(math.round(quality)) + "%",
+             color=color.new(color.green, 20), style=label.style_label_up,
+             textcolor=color.white, size=size.normal)
+        array.push(l_bo_lines, line.new(bar_index, close + _bo_risk * tp1R, bar_index + 20, close + _bo_risk * tp1R, color=color.new(color.lime,  40), style=line.style_dashed))
+        array.push(l_bo_lines, line.new(bar_index, close + _bo_risk * tp2R, bar_index + 20, close + _bo_risk * tp2R, color=color.new(color.green, 40), style=line.style_dashed))
+        array.push(l_bo_lines, line.new(bar_index, close + _bo_risk * tp3R, bar_index + 20, close + _bo_risk * tp3R, color=color.new(color.teal,  40), style=line.style_dashed))
+        array.push(l_bo_lines, line.new(bar_index, _bo_sl,                  bar_index + 20, _bo_sl,                  color=color.new(color.red,   50), style=line.style_dashed))
+
+    if orbBreakDn
+        float _bo_sl   = rHigh + atr14
+        float _bo_risk = _bo_sl - close
+        string _bo_tag = orbWindow ? "SHORT ORB 📉" : "SHORT RB 📉"
+        // Remove previous short breakout lines
+        int _sbl_size = array.size(s_bo_lines)
+        if _sbl_size > 0
+            for _i = 0 to _sbl_size - 1
+                line.delete(array.get(s_bo_lines, _i))
+        array.clear(s_bo_lines)
+        label.new(bar_index, high + atr14 * 1.8,
+             _bo_tag +
+             "\nEntry : " + str.tostring(close,                    format.mintick) +
+             "\nSL    : " + str.tostring(_bo_sl,                   format.mintick) +
+             "\nTP 1  : " + str.tostring(close - _bo_risk * tp1R,  format.mintick) + "  (" + str.tostring(tp1R, "#.#") + "R)" +
+             "\nTP 2  : " + str.tostring(close - _bo_risk * tp2R,  format.mintick) + "  (" + str.tostring(tp2R, "#.#") + "R)" +
+             "\nTP 3  : " + str.tostring(close - _bo_risk * tp3R,  format.mintick) + "  (" + str.tostring(tp3R, "#.#") + "R)" +
+             "\nQual  : " + str.tostring(math.round(quality)) + "%",
+             color=color.new(color.red, 20), style=label.style_label_down,
+             textcolor=color.white, size=size.normal)
+        array.push(s_bo_lines, line.new(bar_index, close - _bo_risk * tp1R, bar_index + 20, close - _bo_risk * tp1R, color=color.new(color.red,    40), style=line.style_dashed))
+        array.push(s_bo_lines, line.new(bar_index, close - _bo_risk * tp2R, bar_index + 20, close - _bo_risk * tp2R, color=color.new(color.orange, 40), style=line.style_dashed))
+        array.push(s_bo_lines, line.new(bar_index, close - _bo_risk * tp3R, bar_index + 20, close - _bo_risk * tp3R, color=color.new(color.maroon, 40), style=line.style_dashed))
+        array.push(s_bo_lines, line.new(bar_index, _bo_sl,                  bar_index + 20, _bo_sl,                  color=color.new(color.lime,   50), style=line.style_dashed))
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 15. DASHBOARD
+// ══════════════════════════════════════════════════════════════════════════════
+_pos = dashPos_str == "Bottom Right" ? position.bottom_right :
+       dashPos_str == "Top Left"     ? position.top_left     :
+       dashPos_str == "Bottom Left"  ? position.bottom_left  : position.top_right
+
+// Strip layout: 17 columns × 2 rows  (row 0 = labels, row 1 = values)
+var table dash = table.new(_pos, 17, 2,
+     bgcolor=color.new(#1e222d, 85), border_width=1, frame_color=#00ffff)
+
+if barstate.islast and showDash
+    // Col 0 — Title
+    table.cell(dash, 0, 0, "RUBY", text_color=#00ffff,      text_size=size.normal)
+    table.cell(dash, 0, 1, syminfo.ticker,      text_color=color.gray,   text_size=size.normal)
+
+    // Col 1 — Regime
+    _rc = market_regime == "TRENDING ↑" ? color.lime : market_regime == "TRENDING ↓" ? color.red : market_regime == "VOLATILE" ? color.orange : color.gray
+    table.cell(dash, 1, 0, "Regime",     text_color=color.gray, text_size=size.normal)
+    table.cell(dash, 1, 1, market_regime, text_color=_rc,       text_size=size.normal)
+
+    // Col 2 — Phase
+    table.cell(dash, 2, 0, "Phase",      text_color=color.gray, text_size=size.normal)
+    table.cell(dash, 2, 1, market_phase, text_color=phase_col,  text_size=size.normal)
+
+    // Col 3 — Bias
+    table.cell(dash, 3, 0, "Bias",       text_color=color.gray, text_size=size.normal)
+    table.cell(dash, 3, 1, bullBias ? "BULL ↑" : "BEAR ↓",
+         text_color=bullBias ? color.lime : color.red,          text_size=size.normal)
+
+    // Col 4 — Quality
+    table.cell(dash, 4, 0, "Quality",    text_color=color.gray, text_size=size.normal)
+    table.cell(dash, 4, 1, str.tostring(math.round(quality)) + "%",
+         text_color=quality >= 70 ? color.lime : quality >= 50 ? color.yellow : color.red,
+         text_size=size.normal)
+
+    // Col 5 — Wave ratio
+    table.cell(dash, 5, 0, "Wave",       text_color=color.gray, text_size=size.normal)
+    table.cell(dash, 5, 1,
+         (mkt_bias == "Bullish" ? "↑ " : "↓ ") + str.tostring(math.round(wave_ratio, 2)) + "x",
+         text_color=mkt_bias == "Bullish" ? color.lime : color.red, text_size=size.normal)
+
+    // Col 6 — Momentum
+    table.cell(dash, 6, 0, "Mom",        text_color=color.gray, text_size=size.normal)
+    table.cell(dash, 6, 1, str.tostring(math.round(math.abs(cur_ratio), 2)) + "x",
+         text_color=cur_ratio >= 0 ? color.lime : color.red,   text_size=size.normal)
+
+    // Col 7 — AO
+    table.cell(dash, 7, 0, "AO",         text_color=color.gray, text_size=size.normal)
+    table.cell(dash, 7, 1, str.tostring(ao, "#.####"),
+         text_color=ao > 0 ? color.lime : color.red,           text_size=size.normal)
+
+    // Col 8 — VWAP
+    table.cell(dash, 8, 0, "VWAP",       text_color=color.gray, text_size=size.normal)
+    table.cell(dash, 8, 1, str.tostring(vwap, format.mintick),
+         text_color=#FF00FF,                                    text_size=size.normal)
+
+    // Col 9 — Volume
+    table.cell(dash, 9, 0, "Volume",     text_color=color.gray, text_size=size.normal)
+    table.cell(dash, 9, 1, str.tostring(volume / volAvg, "0.00") + "×",
+         text_color=volume > volAvg * volMult ? color.lime : color.gray, text_size=size.normal)
+
+    // Col 10 — Volatility
+    _vc = vol_pct >= 0.8 ? color.red : vol_pct >= 0.6 ? color.orange :
+          vol_pct <= 0.2 ? color.blue : color.lime
+    table.cell(dash, 10, 0, "Volat.",    text_color=color.gray, text_size=size.normal)
+    table.cell(dash, 10, 1, vol_regime + " " + str.tostring(math.round(vol_pct * 100)) + "%",
+         text_color=_vc,                                        text_size=size.normal)
+
+    // Col 11 — TG Channel
+    table.cell(dash, 11, 0, "TG Chan",   text_color=color.gray, text_size=size.normal)
+    table.cell(dash, 11, 1, str.tostring(tg_hi, format.mintick) + "/" + str.tostring(tg_lo, format.mintick),
+         text_color=color.white,                                text_size=size.normal)
+
+    // Col 12 — TG Signal
+    _ts = strong_bot ? "⬆ BOUNCE" : strong_top ? "⬇ REJECT" :
+          simple_bot ? "^ touch"  : simple_top ? "˅ touch"  : "—"
+    _tc = strong_bot or simple_bot ? color.lime : strong_top or simple_top ? color.red : color.gray
+    table.cell(dash, 12, 0, "TG Sig",    text_color=color.gray, text_size=size.normal)
+    table.cell(dash, 12, 1, _ts,         text_color=_tc,        text_size=size.normal)
+
+    // Col 13 — ORB
+    table.cell(dash, 13, 0, "ORB",       text_color=color.gray, text_size=size.normal)
+    table.cell(dash, 13, 1,
+         rangeReady
+              ? str.tostring(rHigh, format.mintick) + "/" + str.tostring(rLow, format.mintick)
+              : "BUILDING",
+         text_color=#2962FF,                                    text_size=size.normal)
+
+    // Col 14 — Squeeze
+    table.cell(dash, 14, 0, "Squeeze",   text_color=color.gray, text_size=size.normal)
+    table.cell(dash, 14, 1,
+         sqz_on ? "💥 ON" : sqz_fired ? "🔥 FIRED" : "—",
+         text_color=sqz_on ? color.yellow : sqz_fired ? color.lime : color.gray,
+         text_size=size.normal)
+
+    // Col 15 — RSI
+    table.cell(dash, 15, 0, "RSI",       text_color=color.gray, text_size=size.normal)
+    table.cell(dash, 15, 1, str.tostring(math.round(rsi14)),
+         text_color=rsi14 > 60 ? color.red : rsi14 < 40 ? color.lime : color.gray,
+         text_size=size.normal)
+
+    // Col 16 — Signal
+    _sl = longSignal ? "▲ LONG" : shortSignal ? "▼ SHORT" : "—"
+    _sc = longSignal ? color.lime : shortSignal ? color.red : color.gray
+    table.cell(dash, 16, 0, "Signal",    text_color=color.gray, text_size=size.normal)
+    table.cell(dash, 16, 1, _sl,         text_color=_sc,        text_size=size.normal)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 16. ALERTS
+// ══════════════════════════════════════════════════════════════════════════════
+alertcondition(longSignal,            "Ruby Long",       "{{ticker}} {{interval}} 📈 RUBY LONG")
+alertcondition(shortSignal,           "Ruby Short",      "{{ticker}} {{interval}} 📉 RUBY SHORT")
+alertcondition(longSignal or shortSignal, "Ruby Signal", "{{ticker}} {{interval}} Ruby signal fired")
+alertcondition(orbBreakUp,            "ORB Break Up",    "{{ticker}} {{interval}} 🚀 ORB Breakout UP")
+alertcondition(orbBreakDn,            "ORB Break Down",  "{{ticker}} {{interval}} 📉 ORB Breakout DOWN")
+alertcondition(sqz_fired,             "Squeeze Fired",   "{{ticker}} {{interval}} 💥 Squeeze FIRED")
+alertcondition(strong_bot,            "TG Bounce",       "{{ticker}} {{interval}} TG Strong Bounce")
+alertcondition(strong_top,            "TG Rejection",    "{{ticker}} {{interval}} TG Strong Rejection")
+alertcondition(strong_bot or orbBreakUp, "Long Setup",   "{{ticker}} {{interval}} 📈 Long Setup — Bounce or Breakout")
+alertcondition(strong_top or orbBreakDn, "Short Setup",  "{{ticker}} {{interval}} 📉 Short Setup — Rejection or Breakdown")

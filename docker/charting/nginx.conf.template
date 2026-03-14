@@ -1,0 +1,81 @@
+# =============================================================================
+# Ruby Futures — Charting Service Nginx Config Template
+#
+# Rendered at container start by entrypoint.sh via:
+#   envsubst '${DATA_SERVICE_URL} ${CHARTING_SERVICE_PORT} ${CORS_ORIGINS}'
+#
+# Variables substituted at runtime:
+#   ${DATA_SERVICE_URL}       — upstream data service  (e.g. http://data:8000)
+#   ${CHARTING_SERVICE_PORT}  — port nginx listens on  (e.g. 8003)
+#   ${CORS_ORIGINS}           — CORS allow-origin value (e.g. *)
+#
+# NOTE: nginx variables such as $uri, $host, $request_uri are intentionally
+# NOT in the envsubst variable list above, so they pass through untouched.
+# =============================================================================
+
+server {
+    listen ${CHARTING_SERVICE_PORT};
+    server_name _;
+
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # ── GZIP compression ─────────────────────────────────────────────────────
+    gzip on;
+    gzip_types text/plain text/css application/javascript application/json;
+    gzip_min_length 1024;
+
+    # ── CORS headers ─────────────────────────────────────────────────────────
+    # Required so the browser can call the data service directly from chart.js
+    # (cross-origin fetch for bars + SSE).
+    add_header 'Access-Control-Allow-Origin'  '${CORS_ORIGINS}' always;
+    add_header 'Access-Control-Allow-Methods' 'GET, OPTIONS'    always;
+    add_header 'Access-Control-Allow-Headers' '*'               always;
+
+    # ── Security headers ─────────────────────────────────────────────────────
+    add_header X-Frame-Options        "SAMEORIGIN"             always;
+    add_header X-Content-Type-Options "nosniff"                always;
+    add_header Referrer-Policy        "strict-origin"          always;
+
+    # ── Static asset caching ─────────────────────────────────────────────────
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff2?)$ {
+        expires 1d;
+        add_header Cache-Control "public, max-age=86400, immutable";
+        # Re-apply CORS so assets loaded by iframes also pass CORS checks
+        add_header 'Access-Control-Allow-Origin' '${CORS_ORIGINS}' always;
+        try_files $uri =404;
+    }
+
+    # ── Main SPA entry point ──────────────────────────────────────────────────
+    location / {
+        # Handle CORS preflight
+        if ($request_method = 'OPTIONS') {
+            add_header 'Access-Control-Allow-Origin'  '${CORS_ORIGINS}';
+            add_header 'Access-Control-Allow-Methods' 'GET, OPTIONS';
+            add_header 'Access-Control-Allow-Headers' '*';
+            add_header 'Content-Length' 0;
+            return 204;
+        }
+
+        try_files $uri $uri/ /index.html;
+    }
+
+    # ── Health check ──────────────────────────────────────────────────────────
+    # Used by Docker healthcheck:
+    #   wget --no-verbose --tries=1 --spider http://localhost:8003/health
+    location /health {
+        access_log off;
+        add_header Content-Type text/plain;
+        return 200 'OK\n';
+    }
+
+    # ── Config endpoint (for debugging / dashboard discovery) ────────────────
+    # Returns JSON so the web service can discover the data service URL
+    # used by this charting instance without hardcoding it in the dashboard.
+    location /config {
+        access_log off;
+        add_header Content-Type application/json;
+        add_header 'Access-Control-Allow-Origin' '${CORS_ORIGINS}' always;
+        return 200 '{"data_service_url":"${DATA_SERVICE_URL}","port":${CHARTING_SERVICE_PORT}}';
+    }
+}

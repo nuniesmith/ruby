@@ -1,0 +1,16 @@
+// ── Module: alerts ──────────────────────────────────────────────────────────
+// Part of the Ruby indicator — assembled by PineScriptGenerator
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 16. ALERTS
+// ══════════════════════════════════════════════════════════════════════════════
+alertcondition(longSignal,            "Ruby Long",       "{{ticker}} {{interval}} 📈 RUBY LONG")
+alertcondition(shortSignal,           "Ruby Short",      "{{ticker}} {{interval}} 📉 RUBY SHORT")
+alertcondition(longSignal or shortSignal, "Ruby Signal", "{{ticker}} {{interval}} Ruby signal fired")
+alertcondition(orbBreakUp,            "ORB Break Up",    "{{ticker}} {{interval}} 🚀 ORB Breakout UP")
+alertcondition(orbBreakDn,            "ORB Break Down",  "{{ticker}} {{interval}} 📉 ORB Breakout DOWN")
+alertcondition(sqz_fired,             "Squeeze Fired",   "{{ticker}} {{interval}} 💥 Squeeze FIRED")
+alertcondition(strong_bot,            "TG Bounce",       "{{ticker}} {{interval}} TG Strong Bounce")
+alertcondition(strong_top,            "TG Rejection",    "{{ticker}} {{interval}} TG Strong Rejection")
+alertcondition(strong_bot or orbBreakUp, "Long Setup",   "{{ticker}} {{interval}} 📈 Long Setup — Bounce or Breakout")
+alertcondition(strong_top or orbBreakDn, "Short Setup",  "{{ticker}} {{interval}} 📉 Short Setup — Rejection or Breakdown")

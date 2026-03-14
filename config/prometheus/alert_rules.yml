@@ -1,0 +1,401 @@
+# =============================================================================
+# Prometheus Alert Rules — Ruby Futures
+# =============================================================================
+#
+# Add to prometheus.yml:
+#
+#   rule_files:
+#     - /etc/prometheus/alert_rules.yml
+#
+# Alert channels are configured in Alertmanager.  Each alert carries:
+#   - severity: critical | warning | info
+#   - team: trading | infra
+#   - component: <subsystem name>
+#
+# Runbook URLs use the placeholder https://wiki.internal/runbooks/<name>.
+# Replace with your actual docs location.
+# =============================================================================
+
+groups:
+    # ---------------------------------------------------------------------------
+    # Infrastructure — Redis
+    # ---------------------------------------------------------------------------
+    - name: redis
+      interval: 30s
+      rules:
+          - alert: RedisDown
+            expr: redis_connected == 0
+            for: 1m
+            labels:
+                severity: critical
+                team: infra
+                component: redis
+            annotations:
+                summary: "Redis is disconnected"
+                description: >
+                    The data-service cannot reach Redis.  All SSE streams, ORB detection,
+                    and engine↔dashboard communication are broken until Redis recovers.
+                    Instance: {{ $labels.instance }}
+                runbook_url: "https://wiki.internal/runbooks/redis-down"
+
+          - alert: RedisFlapping
+            expr: changes(redis_connected[5m]) > 3
+            for: 0m
+            labels:
+                severity: warning
+                team: infra
+                component: redis
+            annotations:
+                summary: "Redis connection is unstable (flapping)"
+                description: >
+                    redis_connected changed more than 3 times in the last 5 minutes on
+                    {{ $labels.instance }}.  Check Redis memory, network, and restart
+                    policy.
+                runbook_url: "https://wiki.internal/runbooks/redis-flapping"
+
+    # ---------------------------------------------------------------------------
+    # Infrastructure — Postgres
+    # ---------------------------------------------------------------------------
+    - name: postgres
+      interval: 30s
+      rules:
+          - alert: PostgresDown
+            expr: postgres_connected == 0
+            for: 2m
+            labels:
+                severity: critical
+                team: infra
+                component: postgres
+            annotations:
+                summary: "Postgres is disconnected"
+                description: >
+                    The data-service cannot reach Postgres.  Trade journal, ORB audit
+                    trail, and daily-report persistence are unavailable.
+                    Instance: {{ $labels.instance }}
+                runbook_url: "https://wiki.internal/runbooks/postgres-down"
+
+    # ---------------------------------------------------------------------------
+    # Engine — crash loop detection & liveness
+    # ---------------------------------------------------------------------------
+    - name: engine
+      interval: 30s
+      rules:
+          - alert: EngineDown
+            expr: engine_up == 0
+            for: 3m
+            labels:
+                severity: critical
+                team: trading
+                component: engine
+            annotations:
+                summary: "Trading engine is not running"
+                description: >
+                    engine_up has been 0 for more than 3 minutes on {{ $labels.instance }}.
+                    No ORB scans, risk checks, or focus updates are being computed.
+                    Check the engine container logs for crash details.
+                runbook_url: "https://wiki.internal/runbooks/engine-down"
+
+          - alert: EngineCrashLoop
+            # Engine bounces are visible as rapid flips of engine_up between 0 and 1.
+            # More than 4 state changes in 10 minutes strongly indicates a crash loop.
+            expr: changes(engine_up[10m]) > 4
+            for: 0m
+            labels:
+                severity: critical
+                team: trading
+                component: engine
+            annotations:
+                summary: "Trading engine appears to be in a crash loop"
+                description: >
+                    engine_up toggled more than 4 times in the last 10 minutes on
+                    {{ $labels.instance }}.  The engine is likely restarting repeatedly.
+                    Inspect Docker restart policy and recent engine logs.
+                runbook_url: "https://wiki.internal/runbooks/engine-crash-loop"
+
+          - alert: EngineStaleRefresh
+            # engine_last_refresh_epoch is set each time the engine writes focus data.
+            # If it hasn't been updated for 15 minutes during active hours the engine
+            # is running but stuck.
+            expr: |
+                (time() - engine_last_refresh_epoch) > 900
+                and on() hour() >= 3 and hour() < 12
+            for: 5m
+            labels:
+                severity: warning
+                team: trading
+                component: engine
+            annotations:
+                summary: "Engine has not refreshed data in > 15 minutes (active hours)"
+                description: >
+                    engine_last_refresh_epoch on {{ $labels.instance }} is
+                    {{ $value | humanizeDuration }} old.  The engine process is alive but
+                    not completing its recompute cycle.  Check for stuck threads or data
+                    fetch timeouts.
+                runbook_url: "https://wiki.internal/runbooks/engine-stale-refresh"
+
+          - alert: HighEngineCycleLatency
+            expr: |
+                histogram_quantile(0.95,
+                  rate(engine_cycle_duration_seconds_bucket[5m])
+                ) > 30
+            for: 5m
+            labels:
+                severity: warning
+                team: trading
+                component: engine
+            annotations:
+                summary: "Engine cycle p95 latency is above 30 seconds"
+                description: >
+                    The 95th-percentile engine cycle duration on {{ $labels.instance }}
+                    is {{ $value | humanizeDuration }}.  A single slow cycle blocks the
+                    next ORB scan.  Check data-fetch bottlenecks or CNN inference times.
+                runbook_url: "https://wiki.internal/runbooks/engine-slow-cycle"
+
+    # ---------------------------------------------------------------------------
+    # CNN Model — staleness & availability
+    # ---------------------------------------------------------------------------
+    - name: cnn_model
+      interval: 60s
+      rules:
+          - alert: CNNModelStale
+            expr: model_stale == 1
+            for: 30m
+            labels:
+                severity: warning
+                team: trading
+                component: cnn_model
+            annotations:
+                summary: "CNN breakout model has not been retrained in > 26 hours"
+                description: >
+                    model_stale is 1 on {{ $labels.instance }}.  The champion CNN model
+                    was last promoted more than 26 hours ago.
+                runbook_url: "https://wiki.internal/runbooks/cnn-model-stale"
+
+          - alert: CNNModelLowAccuracy
+            expr: model_val_accuracy < 60
+            for: 10m
+            labels:
+                severity: warning
+                team: trading
+                component: cnn_model
+            annotations:
+                summary: "CNN model validation accuracy dropped below 60%"
+                description: >
+                    model_val_accuracy on {{ $labels.instance }} is {{ $value | printf "%.1f" }}%.
+                    A retrain may be needed.  Review the rb repo training logs and consider
+                    re-running on a larger or more recent dataset.
+                runbook_url: "https://wiki.internal/runbooks/cnn-low-accuracy"
+
+    # ---------------------------------------------------------------------------
+    # Risk — consecutive losses & drawdown
+    # ---------------------------------------------------------------------------
+    - name: risk
+      interval: 30s
+      rules:
+          - alert: ConsecutiveLossesHigh
+            expr: consecutive_losses_gauge >= 3
+            for: 0m
+            labels:
+                severity: warning
+                team: trading
+                component: risk
+            annotations:
+                summary: "{{ $value }} consecutive losing trades"
+                description: >
+                    consecutive_losses_gauge is {{ $value }} on {{ $labels.instance }}.
+                    Review the no-trade conditions and consider pausing automated signals
+                    until market conditions improve.
+                runbook_url: "https://wiki.internal/runbooks/consecutive-losses"
+
+          - alert: DailyPnLDrawdown
+            # Fires if realised P&L drops below -$300 intraday.
+            # Adjust threshold to match your account size and daily loss limit.
+            expr: daily_pnl_gauge < -300
+            for: 0m
+            labels:
+                severity: warning
+                team: trading
+                component: risk
+            annotations:
+                summary: "Daily P&L drawdown exceeds -$300"
+                description: >
+                    daily_pnl_gauge on {{ $labels.instance }} is ${{ $value | printf "%.2f" }}.
+                    Consider pausing trading for the day.  The engine's no-trade engine
+                    should have flagged this, but verify manually.
+                runbook_url: "https://wiki.internal/runbooks/daily-pnl-drawdown"
+
+          - alert: DailyPnLCriticalDrawdown
+            expr: daily_pnl_gauge < -600
+            for: 0m
+            labels:
+                severity: critical
+                team: trading
+                component: risk
+            annotations:
+                summary: "Critical daily P&L drawdown — trading should be halted"
+                description: >
+                    daily_pnl_gauge on {{ $labels.instance }} is ${{ $value | printf "%.2f" }}.
+                    This exceeds the critical loss threshold.  Halt all automated signals
+                    immediately and review open positions.
+                runbook_url: "https://wiki.internal/runbooks/daily-pnl-critical"
+
+    # ---------------------------------------------------------------------------
+    # Kraken WebSocket feed
+    # ---------------------------------------------------------------------------
+    - name: kraken_ws
+      interval: 30s
+      rules:
+          - alert: KrakenWsDisconnected
+            expr: kraken_ws_connected == 0
+            for: 2m
+            labels:
+                severity: warning
+                team: infra
+                component: kraken_ws
+            annotations:
+                summary: "Kraken WebSocket feed is disconnected"
+                description: >
+                    kraken_ws_connected has been 0 for 2+ minutes on {{ $labels.instance }}.
+                    Live crypto OHLCV is not being received.  The feed will attempt
+                    automatic reconnect — check logs if it persists.
+                runbook_url: "https://wiki.internal/runbooks/kraken-ws-disconnected"
+
+          - alert: KrakenWsFrequentReconnects
+            # More than 5 reconnects in 15 minutes indicates a persistent instability.
+            expr: increase(kraken_ws_reconnect_total[15m]) > 5
+            for: 0m
+            labels:
+                severity: warning
+                team: infra
+                component: kraken_ws
+            annotations:
+                summary: "Kraken WebSocket is reconnecting too frequently"
+                description: >
+                    kraken_ws_reconnect_total increased by {{ $value | printf "%.0f" }} times
+                    in the last 15 minutes on {{ $labels.instance }}.  This may indicate
+                    network instability, Kraken API rate-limiting, or a protocol error.
+                runbook_url: "https://wiki.internal/runbooks/kraken-ws-reconnects"
+
+          - alert: KrakenWsBarsFrozen
+            # No new bars received in 10 minutes while the feed claims to be connected.
+            # Uses rate() == 0 as a proxy for a stalled feed.
+            expr: |
+                kraken_ws_connected == 1
+                and rate(kraken_ws_bars_total[10m]) == 0
+            for: 10m
+            labels:
+                severity: warning
+                team: infra
+                component: kraken_ws
+            annotations:
+                summary: "Kraken WebSocket connected but no bars received in 10 minutes"
+                description: >
+                    kraken_ws_bars_total has not increased for 10 minutes on
+                    {{ $labels.instance }} despite the feed reporting as connected.
+                    The connection may be zombie — check for missed ping/pong frames.
+                runbook_url: "https://wiki.internal/runbooks/kraken-ws-frozen"
+
+    # ---------------------------------------------------------------------------
+    # API / HTTP — latency & error rate
+    # ---------------------------------------------------------------------------
+    - name: api_health
+      interval: 30s
+      rules:
+          - alert: HighAPIErrorRate
+            expr: |
+                sum(rate(http_requests_total{status=~"5.."}[5m])) /
+                sum(rate(http_requests_total[5m])) > 0.05
+            for: 3m
+            labels:
+                severity: warning
+                team: infra
+                component: api
+            annotations:
+                summary: "HTTP 5xx error rate above 5%"
+                description: >
+                    More than 5% of requests are returning 5xx errors on
+                    {{ $labels.instance }}.  Current rate: {{ $value | humanizePercentage }}.
+                runbook_url: "https://wiki.internal/runbooks/api-error-rate"
+
+          - alert: HighAPILatencyP95
+            expr: |
+                histogram_quantile(0.95,
+                  sum by (le, path) (
+                    rate(http_request_duration_seconds_bucket{path!~"/metrics.*|/health|/sse/.*"}[5m])
+                  )
+                ) > 2.0
+            for: 5m
+            labels:
+                severity: warning
+                team: infra
+                component: api
+            annotations:
+                summary: "API p95 latency above 2 seconds on path {{ $labels.path }}"
+                description: >
+                    The 95th-percentile latency for {{ $labels.path }} on
+                    {{ $labels.instance }} is {{ $value | humanizeDuration }}.
+                    Investigate slow DB queries or external API calls on that route.
+                runbook_url: "https://wiki.internal/runbooks/api-high-latency"
+
+          - alert: SSEConnectionsSpike
+            expr: sse_connections_active > 20
+            for: 2m
+            labels:
+                severity: info
+                team: infra
+                component: sse
+            annotations:
+                summary: "Unusually high number of active SSE connections ({{ $value }})"
+                description: >
+                    sse_connections_active on {{ $labels.instance }} is {{ $value }}.
+                    This may indicate a reconnect storm from clients.  Verify the
+                    SSE heartbeat and client-side reconnect back-off logic.
+                runbook_url: "https://wiki.internal/runbooks/sse-connection-spike"
+
+    # ---------------------------------------------------------------------------
+    # ORB signal pipeline
+    # ---------------------------------------------------------------------------
+    - name: orb_pipeline
+      interval: 60s
+      rules:
+          - alert: ORBFilterRejectionRateHigh
+            # If more than 85% of ORB detections are being filtered out something
+            # may be misconfigured (e.g. wrong gate_mode or overly tight filters).
+            expr: |
+                rate(orb_filter_results_total{result="rejected"}[30m]) /
+                (
+                  rate(orb_filter_results_total{result="rejected"}[30m]) +
+                  rate(orb_filter_results_total{result="passed"}[30m])
+                ) > 0.85
+            for: 10m
+            labels:
+                severity: info
+                team: trading
+                component: orb_pipeline
+            annotations:
+                summary: "ORB filter rejection rate above 85% over the last 30 minutes"
+                description: >
+                    More than 85% of ORB breakouts are being rejected by the filter gate
+                    on {{ $labels.instance }}.  This may indicate market conditions
+                    are genuinely poor, or that filter thresholds are too aggressive.
+                    Consider reviewing ORB_FILTER_GATE and per-session parameters.
+                runbook_url: "https://wiki.internal/runbooks/orb-filter-rejection"
+
+          - alert: ORBNoScansActivePeriod
+            # During active trading hours (09:30–11:00 ET = 13:30–15:00 UTC),
+            # there should be at least some ORB scan activity.
+            expr: |
+                rate(orb_detections_total[30m]) == 0
+                and on() (hour() >= 13 and hour() < 16)
+            for: 20m
+            labels:
+                severity: warning
+                team: trading
+                component: orb_pipeline
+            annotations:
+                summary: "No ORB scans detected during active US trading hours"
+                description: >
+                    orb_detections_total has not increased in the last 30 minutes on
+                    {{ $labels.instance }} during expected active trading hours.
+                    The ORB check scheduler may be stuck or the engine may be down.
+                runbook_url: "https://wiki.internal/runbooks/orb-no-scans"

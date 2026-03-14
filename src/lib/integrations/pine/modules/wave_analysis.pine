@@ -1,0 +1,61 @@
+// ── Module: wave_analysis ───────────────────────────────────────────────────
+// Part of the Ruby indicator — assembled by PineScriptGenerator
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 4. WAVE ANALYSIS  (from Ruby)
+// Tracks bull / bear wave amplitudes → wave ratio + current momentum
+// ══════════════════════════════════════════════════════════════════════════════
+dyn_ema = ta.ema(close, 20)
+
+var float speed     = 0.0
+c_rma = ta.rma(close, 10)
+o_rma = ta.rma(open,  10)
+
+var int   wx1        = na
+var array<float> bull_waves = array.new<float>()
+var array<float> bear_waves = array.new<float>()
+
+if na(wx1)
+    wx1 := bar_index
+
+int   wave_lkbk = math.max(1, bar_index - nz(wx1, bar_index))
+float speed_lo  = ta.lowest( speed, wave_lkbk)
+float speed_hi  = ta.highest(speed, wave_lkbk)
+
+// Record wave amplitude on each EMA crossover
+if close > dyn_ema and close[1] <= dyn_ema
+    array.unshift(bear_waves, speed_lo)
+    if array.size(bear_waves) > 200
+        array.pop(bear_waves)
+    wx1   := bar_index
+    speed := c_rma - o_rma
+
+if close < dyn_ema and close[1] >= dyn_ema
+    array.unshift(bull_waves, speed_hi)
+    if array.size(bull_waves) > 200
+        array.pop(bull_waves)
+    wx1   := bar_index
+    speed := c_rma - o_rma
+
+speed      := speed + (c_rma - o_rma)
+trendspeed  = ta.hma(speed, 5)
+
+var float wave_ratio = 1.0
+var float dom_val    = 0.0
+var string mkt_bias  = "Neutral"
+var float bull_avg   = 0.0001
+var float bear_avg_v = 0.0001   // absolute value of bear average
+
+if barstate.isconfirmed
+    if array.size(bull_waves) > 0
+        bull_avg := array.avg(bull_waves)
+    if array.size(bear_waves) > 0
+        bear_avg_v := math.abs(array.avg(bear_waves))
+    wave_ratio := bear_avg_v == 0 ? 1.0 : bull_avg / bear_avg_v
+    dom_val    := bull_avg - bear_avg_v
+    mkt_bias   := dom_val > 0 ? "Bullish" : dom_val < 0 ? "Bearish" : "Neutral"
+
+// Current bar momentum vs historical average (positive = bullish)
+cur_ratio = speed > 0
+     ? (bull_avg   > 0 ? speed             / bull_avg   :  1.0)
+     : (bear_avg_v > 0 ? math.abs(speed)   / bear_avg_v * -1.0 : -1.0)

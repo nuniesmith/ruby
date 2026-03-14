@@ -1,0 +1,110 @@
+// ── Module: info_table ──────────────────────────────────────────────────────
+// Part of the Ruby indicator — assembled by PineScriptGenerator
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 15. DASHBOARD
+// ══════════════════════════════════════════════════════════════════════════════
+_pos = dashPos_str == "Bottom Right" ? position.bottom_right :
+       dashPos_str == "Top Left"     ? position.top_left     :
+       dashPos_str == "Bottom Left"  ? position.bottom_left  : position.top_right
+
+// Strip layout: 17 columns × 2 rows  (row 0 = labels, row 1 = values)
+var table dash = table.new(_pos, 17, 2,
+     bgcolor=color.new(#1e222d, 85), border_width=1, frame_color=#00ffff)
+
+if barstate.islast and showDash
+    // Col 0 — Title
+    table.cell(dash, 0, 0, "RUBY", text_color=#00ffff,      text_size=size.normal)
+    table.cell(dash, 0, 1, syminfo.ticker,      text_color=color.gray,   text_size=size.normal)
+
+    // Col 1 — Regime
+    _rc = market_regime == "TRENDING ↑" ? color.lime : market_regime == "TRENDING ↓" ? color.red : market_regime == "VOLATILE" ? color.orange : color.gray
+    table.cell(dash, 1, 0, "Regime",     text_color=color.gray, text_size=size.normal)
+    table.cell(dash, 1, 1, market_regime, text_color=_rc,       text_size=size.normal)
+
+    // Col 2 — Phase
+    table.cell(dash, 2, 0, "Phase",      text_color=color.gray, text_size=size.normal)
+    table.cell(dash, 2, 1, market_phase, text_color=phase_col,  text_size=size.normal)
+
+    // Col 3 — Bias
+    table.cell(dash, 3, 0, "Bias",       text_color=color.gray, text_size=size.normal)
+    table.cell(dash, 3, 1, bullBias ? "BULL ↑" : "BEAR ↓",
+         text_color=bullBias ? color.lime : color.red,          text_size=size.normal)
+
+    // Col 4 — Quality
+    table.cell(dash, 4, 0, "Quality",    text_color=color.gray, text_size=size.normal)
+    table.cell(dash, 4, 1, str.tostring(math.round(quality)) + "%",
+         text_color=quality >= 70 ? color.lime : quality >= 50 ? color.yellow : color.red,
+         text_size=size.normal)
+
+    // Col 5 — Wave ratio
+    table.cell(dash, 5, 0, "Wave",       text_color=color.gray, text_size=size.normal)
+    table.cell(dash, 5, 1,
+         (mkt_bias == "Bullish" ? "↑ " : "↓ ") + str.tostring(math.round(wave_ratio, 2)) + "x",
+         text_color=mkt_bias == "Bullish" ? color.lime : color.red, text_size=size.normal)
+
+    // Col 6 — Momentum
+    table.cell(dash, 6, 0, "Mom",        text_color=color.gray, text_size=size.normal)
+    table.cell(dash, 6, 1, str.tostring(math.round(math.abs(cur_ratio), 2)) + "x",
+         text_color=cur_ratio >= 0 ? color.lime : color.red,   text_size=size.normal)
+
+    // Col 7 — AO
+    table.cell(dash, 7, 0, "AO",         text_color=color.gray, text_size=size.normal)
+    table.cell(dash, 7, 1, str.tostring(ao, "#.####"),
+         text_color=ao > 0 ? color.lime : color.red,           text_size=size.normal)
+
+    // Col 8 — VWAP
+    table.cell(dash, 8, 0, "VWAP",       text_color=color.gray, text_size=size.normal)
+    table.cell(dash, 8, 1, str.tostring(vwap, format.mintick),
+         text_color=#FF00FF,                                    text_size=size.normal)
+
+    // Col 9 — Volume
+    table.cell(dash, 9, 0, "Volume",     text_color=color.gray, text_size=size.normal)
+    table.cell(dash, 9, 1, str.tostring(volume / volAvg, "0.00") + "×",
+         text_color=volume > volAvg * volMult ? color.lime : color.gray, text_size=size.normal)
+
+    // Col 10 — Volatility
+    _vc = vol_pct >= 0.8 ? color.red : vol_pct >= 0.6 ? color.orange :
+          vol_pct <= 0.2 ? color.blue : color.lime
+    table.cell(dash, 10, 0, "Volat.",    text_color=color.gray, text_size=size.normal)
+    table.cell(dash, 10, 1, vol_regime + " " + str.tostring(math.round(vol_pct * 100)) + "%",
+         text_color=_vc,                                        text_size=size.normal)
+
+    // Col 11 — TG Channel
+    table.cell(dash, 11, 0, "TG Chan",   text_color=color.gray, text_size=size.normal)
+    table.cell(dash, 11, 1, str.tostring(tg_hi, format.mintick) + "/" + str.tostring(tg_lo, format.mintick),
+         text_color=color.white,                                text_size=size.normal)
+
+    // Col 12 — TG Signal
+    _ts = strong_bot ? "⬆ BOUNCE" : strong_top ? "⬇ REJECT" :
+          simple_bot ? "^ touch"  : simple_top ? "˅ touch"  : "—"
+    _tc = strong_bot or simple_bot ? color.lime : strong_top or simple_top ? color.red : color.gray
+    table.cell(dash, 12, 0, "TG Sig",    text_color=color.gray, text_size=size.normal)
+    table.cell(dash, 12, 1, _ts,         text_color=_tc,        text_size=size.normal)
+
+    // Col 13 — ORB
+    table.cell(dash, 13, 0, "ORB",       text_color=color.gray, text_size=size.normal)
+    table.cell(dash, 13, 1,
+         rangeReady
+              ? str.tostring(rHigh, format.mintick) + "/" + str.tostring(rLow, format.mintick)
+              : "BUILDING",
+         text_color=#2962FF,                                    text_size=size.normal)
+
+    // Col 14 — Squeeze
+    table.cell(dash, 14, 0, "Squeeze",   text_color=color.gray, text_size=size.normal)
+    table.cell(dash, 14, 1,
+         sqz_on ? "💥 ON" : sqz_fired ? "🔥 FIRED" : "—",
+         text_color=sqz_on ? color.yellow : sqz_fired ? color.lime : color.gray,
+         text_size=size.normal)
+
+    // Col 15 — RSI
+    table.cell(dash, 15, 0, "RSI",       text_color=color.gray, text_size=size.normal)
+    table.cell(dash, 15, 1, str.tostring(math.round(rsi14)),
+         text_color=rsi14 > 60 ? color.red : rsi14 < 40 ? color.lime : color.gray,
+         text_size=size.normal)
+
+    // Col 16 — Signal
+    _sl = longSignal ? "▲ LONG" : shortSignal ? "▼ SHORT" : "—"
+    _sc = longSignal ? color.lime : shortSignal ? color.red : color.gray
+    table.cell(dash, 16, 0, "Signal",    text_color=color.gray, text_size=size.normal)
+    table.cell(dash, 16, 1, _sl,         text_color=_sc,        text_size=size.normal)

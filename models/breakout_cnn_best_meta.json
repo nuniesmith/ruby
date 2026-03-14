@@ -1,0 +1,50 @@
+{
+  "trained_at": "2026-03-06T20:59:05.579064+00:00",
+  "metrics": {
+    "val_accuracy": 87.1,
+    "val_precision": 87.15,
+    "val_recall": 87.27,
+    "epochs_trained": 25,
+    "best_epoch": null
+  },
+  "config": {
+    "symbols": [
+      "MGC",
+      "SIL",
+      "MHG",
+      "MCL",
+      "MNG",
+      "MES",
+      "MNQ",
+      "M2K",
+      "MYM",
+      "6E",
+      "6B",
+      "6J",
+      "6A",
+      "6C",
+      "6S",
+      "ZN",
+      "ZB",
+      "ZC",
+      "ZS",
+      "ZW",
+      "MBT",
+      "MET"
+    ],
+    "days_back": 90,
+    "breakout_type": "all",
+    "orb_session": "all",
+    "bars_source": "massive",
+    "epochs": 25,
+    "batch_size": 64,
+    "learning_rate": 0.0002,
+    "patience": 8,
+    "gates": {
+      "min_acc": 80.0,
+      "min_prec": 75.0,
+      "min_rec": 70.0
+    }
+  },
+  "version": "v6"
+}

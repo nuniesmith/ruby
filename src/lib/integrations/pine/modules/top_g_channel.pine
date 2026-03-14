@@ -1,0 +1,32 @@
+// ── Module: top_g_channel ───────────────────────────────────────────────────
+// Part of the Ruby indicator — assembled by PineScriptGenerator
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 3. TOP G CHANNEL
+// ══════════════════════════════════════════════════════════════════════════════
+tg_lo    = ta.lowest (low,  topGLen)
+tg_hi    = ta.highest(high, topGLen)
+tg_mid   = ta.hma(math.avg(tg_lo, tg_hi), 15)
+tg_range = tg_hi - tg_lo
+
+// Normalised rate-of-change for momentum confirmation
+roc8     = ta.roc(close, 8)
+roc8_std = ta.stdev(roc8, 200)
+roc_norm = roc8_std > 0 ? roc8 / roc8_std : 0.0
+
+// ── Strong signals (entry-grade) ─────────────────────────────────────────────
+// Strong bounce: two consecutive bars at channel low + momentum exhaustion
+strong_bot = low[1] == tg_lo[1] and low > tg_lo and low[2] == tg_lo[2] and
+             roc_norm[2] < -2 * sigSens and barstate.isconfirmed
+
+// Strong rejection: fell off resistance + support flat for 5 bars + roc > 2σ
+strong_top = high < tg_hi and high[1] == tg_hi[1] and
+             roc_norm[2] > 2 * sigSens and tg_lo == tg_lo[5] and barstate.isconfirmed
+
+// ── Simple signals (visual marker only — NOT an entry) ──────────────────────
+simple_bot = low[1]  == tg_lo[1] and low  > tg_lo and not strong_bot and barstate.isconfirmed
+simple_top = high[1] == tg_hi[1] and high < tg_hi and not strong_top and barstate.isconfirmed
+
+// ── Potential / early-warning — price entering channel zone with momentum ────
+bool pot_bot = low  <= tg_lo + atr14 * 0.5 and roc_norm < -1 * sigSens and barstate.isconfirmed
+bool pot_top = high >= tg_hi - atr14 * 0.5 and roc_norm >  1 * sigSens and barstate.isconfirmed

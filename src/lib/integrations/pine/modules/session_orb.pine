@@ -1,0 +1,87 @@
+// ── Module: session_orb ─────────────────────────────────────────────────────
+// Part of the Ruby indicator — assembled by PineScriptGenerator
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 7. SESSION BIAS + ORB
+// ══════════════════════════════════════════════════════════════════════════════
+newDay = ta.change(time("D")) != 0
+// Session filter — set Session Hours in settings, or disable entirely for 24/7 assets
+inRTH  = not useSession or not na(time("1", sessionHours))
+
+// 3-min HTF by default — fast enough to catch 1-min moves while filtering noise
+htTrend  = request.security(syminfo.tickerid, htfTF,
+     close > ta.ema(close, 9) ? 1 : -1, lookahead=barmerge.lookahead_off)
+
+bullBias = biasMode == "Long Only" or
+           (biasMode == "Auto" and
+            (close > vwap ? 1 : 0) + (ao > 0 ? 1 : 0) + (htTrend == 1 ? 1 : 0) >= 2)
+
+// ── ORB ──────────────────────────────────────────────────────────────────────
+var float rHigh      = na
+var float rLow       = na
+var bool  rangeReady = false
+
+bool cross_hi = ta.crossover (high, nz(rHigh))
+bool cross_lo = ta.crossunder(low,  nz(rLow))
+
+if newDay
+    rHigh      := na
+    rLow       := na
+    rangeReady := false
+
+int barsSinceOpen = ta.barssince(newDay)
+if barsSinceOpen * timeframe.multiplier <= orbMinutes and inRTH
+    rHigh := math.max(nz(rHigh, high), high)
+    rLow  := math.min(nz(rLow,  low),  low)
+else if not rangeReady and not na(rHigh)
+    rangeReady := true
+
+orbBreakUp = rangeReady and cross_hi and     bullBias
+orbBreakDn = rangeReady and cross_lo and not bullBias
+
+// ── True-ORB windows — 30 min after each major session open ──────────────────
+// These use the chart's exchange timezone.  Adjust times if your instrument
+// sits on a different exchange clock (e.g. CME = CT, subtract 1 h from ET).
+//   New York RTH  09:30 ET  →  use "0930-1000"
+//   London open   08:00 GMT →  use "0300-0330" on US-exchange charts (ET)
+//   Asia / Tokyo  09:00 JST →  use "1800-1830" on US-exchange charts (ET)
+bool orbWindow = not na(time("1", "0930-1000")) or
+                 not na(time("1", "0300-0330")) or
+                 not na(time("1", "1800-1830"))
+
+// ── Previous-Day H/L  (auto) ─────────────────────────────────────────────────
+var float pdHigh = na
+var float pdLow  = na
+if newDay
+    pdHigh := high[1]
+    pdLow  := low[1]
+else
+    pdHigh := nz(pdHigh, high)
+    pdLow  := nz(pdLow,  low)
+
+// ── Initial Balance 60-min  (auto) ───────────────────────────────────────────
+var float ibHigh = na
+var float ibLow  = na
+var int   ibBars = 0
+var bool  ibDone = false
+
+if newDay
+    ibHigh := high
+    ibLow  := low
+    ibBars := 0
+    ibDone := false
+
+if not ibDone and inRTH
+    ibBars += 1
+    ibHigh := math.max(ibHigh, high)
+    ibLow  := math.min(ibLow,  low)
+    if ibBars * timeframe.multiplier >= ibMinutes and barstate.isconfirmed
+        ibDone := true
+
+// ── Squeeze Detection  (auto) ────────────────────────────────────────────────
+bb_u = ta.sma(close, 20) + 2.0 * ta.stdev(close, 20)
+bb_l = ta.sma(close, 20) - 2.0 * ta.stdev(close, 20)
+kc_u = ta.sma(close, 20) + ta.atr(20) * 1.5
+kc_l = ta.sma(close, 20) - ta.atr(20) * 1.5
+sqz_on    = bb_l > kc_l and bb_u < kc_u
+sqz_fired = sqz_on[1] and not sqz_on

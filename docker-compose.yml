@@ -1,0 +1,549 @@
+# =============================================================================
+# Ruby Futures — Docker Compose
+# =============================================================================
+#
+# Services:
+#   base       — shared Python deps image (data/engine/web inherit from this)
+#   postgres   — durable storage (journal, historical opts, alerts)
+#   redis      — hot cache (latest Ruby metrics, live positions, 1m bars)
+#   data       — FastAPI REST + SSE API (port 8050); bar cache, Kraken feed,
+#                Redis reads of engine-published state
+#   engine     — background computation worker; publishes focus/risk to Redis
+#   web        — HTMX dashboard frontend; reverse-proxies to data (port 8080)
+#   trainer    — GPU CNN training server (port 8200)  [training profile]
+#   prometheus — metrics collection & alerting
+#   grafana    — dashboards & visualization
+#
+# Docker Hub repo (built by CI/CD):
+#   nuniesmith/futures:base       — shared Python deps (arm64 + amd64)
+#   nuniesmith/futures:data       — data API service (arm64 + amd64)
+#   nuniesmith/futures:engine     — background engine worker (arm64 + amd64)
+#   nuniesmith/futures:web        — HTMX dashboard (arm64 + amd64)
+#   nuniesmith/futures:trainer    — GPU training server (amd64 only)
+#   nuniesmith/futures:prometheus — Prometheus with baked-in config (arm64 + amd64)
+#   nuniesmith/futures:grafana    — Grafana with baked-in dashboards (arm64 + amd64)
+#   nuniesmith/futures:latest     — alias for :data (default pull)
+#
+# Build order (handled automatically by depends_on + profiles):
+#   1. docker compose build base          ← slow once; cached until pyproject.toml changes
+#   2. docker compose build data engine web  ← fast; only copies src/
+#
+# Usage:
+#   docker compose up -d --build                            # all CPU services
+#   docker compose --profile training up -d --build         # + trainer (GPU rig)
+#   docker compose logs -f data
+#   docker compose logs -f engine
+#   docker compose logs -f web
+#   docker compose ps
+#
+# =============================================================================
+
+services:
+    # -------------------------------------------------------------------------
+    # Base — shared Python runtime image
+    #
+    # Installs the full pyproject.toml dependency set ONCE into a named image
+    # (nuniesmith/futures:base).  The data, engine, and web service Dockerfiles
+    # all use FROM nuniesmith/futures:base so they skip pip install entirely.
+    #
+    # This service has no running container — it exists purely as a build
+    # target.  The image: tag makes it referenceable by child services and
+    # by the CI/CD push pipeline.
+    #
+    # Rebuild this when pyproject.toml changes:
+    #   docker compose build base
+    # All other rebuilds (src/ changes) skip this and reuse the cached layer.
+    # -------------------------------------------------------------------------
+    base:
+        image: nuniesmith/futures:base
+        build:
+            context: .
+            dockerfile: docker/base/Dockerfile
+        # No ports, volumes, env, or restart policy — build-only target.
+        # The `profiles` trick keeps it out of `docker compose up` so it
+        # never spawns a running container, but `docker compose build base`
+        # and explicit `docker compose build` still work.
+        profiles:
+            - base
+
+    # -------------------------------------------------------------------------
+    # PostgreSQL — durable storage
+    # -------------------------------------------------------------------------
+    postgres:
+        image: postgres:16-alpine
+        restart: unless-stopped
+        ports:
+            - "5433:5432"
+        environment:
+            POSTGRES_USER: ${POSTGRES_USER:-futures_user}
+            POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+            POSTGRES_DB: ${POSTGRES_DB:-futures_db}
+        volumes:
+            - postgres_data:/var/lib/postgresql/data
+        healthcheck:
+            test:
+                [
+                    "CMD-SHELL",
+                    "pg_isready -U ${POSTGRES_USER:-futures_user} -d ${POSTGRES_DB:-futures_db}",
+                ]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+            start_period: 10s
+
+    # -------------------------------------------------------------------------
+    # Redis — hot cache for real-time data
+    # -------------------------------------------------------------------------
+    redis:
+        image: redis:7-alpine
+        restart: unless-stopped
+        ports:
+            - "6380:6379"
+        volumes:
+            - redis_data:/data
+        command:
+            - redis-server
+            - --requirepass
+            - ${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}
+            - --appendonly
+            - "yes"
+            - --maxmemory
+            - 256mb
+            - --maxmemory-policy
+            - allkeys-lru
+        healthcheck:
+            test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+            interval: 10s
+            timeout: 3s
+            retries: 3
+
+    # -------------------------------------------------------------------------
+    # Data — FastAPI REST + SSE API (port 8050)
+    #
+    # Responsibilities:
+    #   - All REST + SSE endpoints consumed by the web dashboard
+    #   - Bar cache management (Postgres + Redis, gap-fill via Massive / Kraken)
+    #   - Kraken WebSocket live crypto feed
+    #   - Reads engine-published focus / risk / ORB state from Redis
+    #
+    # The data service is STATELESS with respect to computation — it never runs
+    # the DashboardEngine. The engine container publishes computed state to Redis
+    # for the data service to serve.
+    # -------------------------------------------------------------------------
+    data:
+        image: nuniesmith/futures:data
+        build:
+            context: .
+            dockerfile: docker/data/Dockerfile
+            # Ensure the base image is built before this service.
+            # Docker Compose resolves this as a build-time dependency so
+            # `docker compose build` always builds base first.
+            additional_contexts:
+                base: docker-image://nuniesmith/futures:base
+        restart: unless-stopped
+        ports:
+            - "8050:8000"
+        env_file:
+            - .env
+        environment:
+            - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+            - DATABASE_URL=postgresql+psycopg://${POSTGRES_USER:-futures_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-futures_db}
+            - DB_PATH=/app/data/futures_journal.db
+            - DATA_SERVICE_HOST=0.0.0.0
+            - DATA_SERVICE_PORT=8000
+            - ENGINE_MODE=remote
+            - ORB_FILTER_GATE=${ORB_FILTER_GATE:-majority}
+            - ORB_CNN_GATE=${ORB_CNN_GATE:-0}
+            - KRAKEN_API_KEY=${KRAKEN_API_KEY:-}
+            - KRAKEN_API_SECRET=${KRAKEN_API_SECRET:-}
+            - ENABLE_KRAKEN_CRYPTO=${ENABLE_KRAKEN_CRYPTO:-1}
+            - TRAINER_API_KEY=${TRAINER_API_KEY:-}
+            - TRAINER_SERVICE_URL=${TRAINER_SERVICE_URL:-http://100.113.72.63:8200}
+            - GITHUB_SIGNALS_REPO=${GITHUB_SIGNALS_REPO:-nuniesmith/futures-signals}
+            - LOG_LEVEL=info
+            - PYTHONPATH=/app/src
+            - PYTHONUNBUFFERED=1
+            # Backfill chunk size — increase to 30 when MASSIVE_API_KEY is set
+            # to reduce round-trips on long initial fills (5 days default is
+            # safe for yfinance but causes ~36 chunks for a 180-day Massive fill).
+            - BACKFILL_CHUNK_DAYS=${BACKFILL_CHUNK_DAYS:-5}
+            - CHARTING_SERVICE_URL=http://charting:8003
+        volumes:
+            - app_data:/app/data
+        depends_on:
+            redis:
+                condition: service_healthy
+            postgres:
+                condition: service_healthy
+        healthcheck:
+            test:
+                [
+                    "CMD",
+                    "python",
+                    "-c",
+                    "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')",
+                ]
+            interval: 15s
+            timeout: 5s
+            start_period: 45s
+            retries: 3
+
+    # -------------------------------------------------------------------------
+    # Engine — background computation worker
+    #
+    # Runs the DashboardEngine: Ruby modules, optimization, backtesting,
+    # daily focus computation, session-aware scheduling, live risk publishing.
+    # Publishes all computed state to Redis for the data service to serve.
+    #
+    # No HTTP port is exposed — the data service owns port 8000.
+    # CNN training runs on a dedicated GPU machine via the trainer service.
+    # Trained models are stored in ./models/ and hot-reloaded by the engine.
+    # -------------------------------------------------------------------------
+    engine:
+        image: nuniesmith/futures:engine
+        build:
+            context: .
+            dockerfile: docker/engine/Dockerfile
+            additional_contexts:
+                base: docker-image://nuniesmith/futures:base
+        restart: unless-stopped
+        shm_size: 2gb
+        env_file:
+            - .env
+        environment:
+            - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+            - DATABASE_URL=postgresql+psycopg://${POSTGRES_USER:-futures_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-futures_db}
+            - DB_PATH=/app/data/futures_journal.db
+            - DATA_SERVICE_URL=http://data:8000
+            - ENGINE_DATA_URL=http://data:8000
+            - ORB_FILTER_GATE=${ORB_FILTER_GATE:-majority}
+            - ORB_CNN_GATE=${ORB_CNN_GATE:-0}
+            - KRAKEN_API_KEY=${KRAKEN_API_KEY:-}
+            - KRAKEN_API_SECRET=${KRAKEN_API_SECRET:-}
+            - ENABLE_KRAKEN_CRYPTO=${ENABLE_KRAKEN_CRYPTO:-0}
+            - TRAINER_API_KEY=${TRAINER_API_KEY:-}
+            - TRAINER_SERVICE_URL=${TRAINER_SERVICE_URL:-http://100.113.72.63:8200}
+            - GITHUB_SIGNALS_REPO=${GITHUB_SIGNALS_REPO:-nuniesmith/futures-signals}
+            - LOG_LEVEL=info
+            - PYTHONPATH=/app/src
+            - PYTHONUNBUFFERED=1
+        volumes:
+            - app_data:/app/data
+            - ./models:/app/models
+            - ./scripts:/app/scripts
+        depends_on:
+            redis:
+                condition: service_healthy
+            postgres:
+                condition: service_healthy
+            data:
+                condition: service_healthy
+        healthcheck:
+            test: ["CMD", "test", "-f", "/tmp/engine_health.json"]
+            interval: 15s
+            timeout: 5s
+            start_period: 60s
+            retries: 3
+
+    # -------------------------------------------------------------------------
+    # Web — HTMX Dashboard Frontend
+    # Stateless reverse-proxy that serves the dashboard HTML and proxies all
+    # API/SSE requests to the data service. No Redis or Postgres access.
+    # User-facing entry point at http://localhost:8180
+    # -------------------------------------------------------------------------
+    web:
+        image: nuniesmith/futures:web
+        build:
+            context: .
+            dockerfile: docker/web/Dockerfile
+            additional_contexts:
+                base: docker-image://nuniesmith/futures:base
+        restart: unless-stopped
+        ports:
+            - "8080:8080"
+        environment:
+            - DATA_SERVICE_URL=http://data:8000
+            - CHARTING_SERVICE_URL=http://charting:8003
+            - TRAINER_SERVICE_URL=${TRAINER_SERVICE_URL:-http://100.113.72.63:8200}
+            - WEB_HOST=0.0.0.0
+            - WEB_PORT=8080
+            - API_KEY=${API_KEY:-}
+            - LOG_LEVEL=info
+            - PYTHONPATH=/app/src
+            - PYTHONUNBUFFERED=1
+        depends_on:
+            data:
+                condition: service_healthy
+        healthcheck:
+            test:
+                [
+                    "CMD",
+                    "python",
+                    "-c",
+                    "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')",
+                ]
+            interval: 15s
+            timeout: 5s
+            start_period: 15s
+            retries: 3
+
+    # -------------------------------------------------------------------------
+    # Charting — Static TradingView Lightweight Charts (port 8003)
+    #
+    # Pure Nginx + JS (zero Python overhead). Serves the TradingView Lightweight
+    # Charts UI as a static site. Fetches bars + SSE directly from data-service.
+    # Embeds in the HTMX dashboard via iframe or plain JS fetch.
+    # -------------------------------------------------------------------------
+    charting:
+        image: nuniesmith/futures:charting
+        build:
+            context: .
+            dockerfile: docker/charting/Dockerfile
+        restart: unless-stopped
+        ports:
+            - "8003:8003"
+        environment:
+            - DATA_SERVICE_URL=http://data:8000
+            - CHARTING_SERVICE_PORT=8003
+            - CORS_ORIGINS=*
+        volumes:
+            - ./src/entrypoints/charting:/app/src/entrypoints/charting:ro
+        depends_on:
+            data:
+                condition: service_healthy
+        healthcheck:
+            test:
+                [
+                    "CMD",
+                    "wget",
+                    "--no-verbose",
+                    "--tries=1",
+                    "--spider",
+                    "http://localhost:8003/health",
+                ]
+            interval: 15s
+            timeout: 5s
+            start_period: 10s
+            retries: 3
+
+    # -------------------------------------------------------------------------
+    # Trainer — GPU CNN retraining server (port 8200)       [training profile]
+    #
+    # ⚠️  PRODUCTION NOTE: The trainer GPU rig uses the standalone
+    #     docker-compose.trainer.yml instead of this file. That file has
+    #     no postgres/redis dependencies — the trainer fetches all market
+    #     data from the engine over Tailscale via ENGINE_DATA_URL.
+    #
+    #     This definition is kept for LOCAL DEVELOPMENT only (running the
+    #     full stack on one machine with --profile training).
+    #
+    # Runs a FastAPI server that listens for POST /train requests. Each request
+    # triggers the full pipeline: dataset generation → model training →
+    # evaluation → champion promotion.
+    #
+    # Only started with:  docker compose --profile training up -d
+    # Requires NVIDIA GPU + nvidia-container-toolkit on the host.
+    # -------------------------------------------------------------------------
+    trainer:
+        image: nuniesmith/futures:trainer
+        profiles: [training]
+        build:
+            context: .
+            dockerfile: docker/trainer/Dockerfile
+        # Restart unless explicitly stopped — this is a persistent service,
+        # not a one-shot pipeline.  It stays alive between training runs.
+        restart: unless-stopped
+        shm_size: 4gb
+        ports:
+            - "8200:8200"
+        deploy:
+            resources:
+                reservations:
+                    devices:
+                        - driver: nvidia
+                          count: 1
+                          capabilities: [gpu]
+        environment:
+            # ----------------------------------------------------------------
+            # Trainer server config
+            # ----------------------------------------------------------------
+            - TRAINER_HOST=0.0.0.0
+            - TRAINER_PORT=8200
+            # Optional: set a bearer token to protect the /train endpoint.
+            # Leave unset (or empty) for no authentication.
+            - TRAINER_API_KEY=${TRAINER_API_KEY:-}
+
+            # ----------------------------------------------------------------
+            # Validation gate thresholds (pipeline defaults — can be
+            # overridden per-request in the POST /train body)
+            # ----------------------------------------------------------------
+            - CNN_RETRAIN_MIN_ACC=${CNN_RETRAIN_MIN_ACC:-80.0}
+            - CNN_RETRAIN_MIN_PRECISION=${CNN_RETRAIN_MIN_PRECISION:-75.0}
+            - CNN_RETRAIN_MIN_RECALL=${CNN_RETRAIN_MIN_RECALL:-70.0}
+            - CNN_RETRAIN_IMPROVEMENT=${CNN_RETRAIN_IMPROVEMENT:-0.0}
+
+            # ----------------------------------------------------------------
+            # Training hyperparameters (pipeline defaults)
+            # ----------------------------------------------------------------
+            - CNN_RETRAIN_EPOCHS=${CNN_RETRAIN_EPOCHS:-60}
+            - CNN_RETRAIN_BATCH_SIZE=${CNN_RETRAIN_BATCH_SIZE:-64}
+            - CNN_RETRAIN_LR=${CNN_RETRAIN_LR:-0.0001}
+            - CNN_RETRAIN_PATIENCE=${CNN_RETRAIN_PATIENCE:-12}
+
+            # ----------------------------------------------------------------
+            # Data service — trainer fetches bars from the data service
+            # ----------------------------------------------------------------
+            - ENGINE_DATA_URL=http://data:8000
+            - DATA_SERVICE_URL=http://data:8000
+            # Timeout (seconds) for a single GET /bars/{symbol} call.
+            # The data service now returns immediately with existing data +
+            # filling=true when a background fill is in progress, so 60s is
+            # usually enough.  Increase on slow Tailscale links.
+            - ENGINE_BARS_TIMEOUT=${ENGINE_BARS_TIMEOUT:-60}
+            # Max seconds to wait for an in-progress background fill before
+            # giving up and using the partial data already returned.
+            # 300 = 5 minutes; covers most initial Massive backfills.
+            - ENGINE_FILL_POLL_MAX_WAIT=${ENGINE_FILL_POLL_MAX_WAIT:-300}
+            # Seconds between fill-status polls while waiting.
+            - ENGINE_FILL_POLL_INTERVAL=${ENGINE_FILL_POLL_INTERVAL:-10}
+
+            # ----------------------------------------------------------------
+            # Market data — Massive API (futures) + Kraken API (crypto)
+            # ----------------------------------------------------------------
+            - MASSIVE_API_KEY=${MASSIVE_API_KEY}
+            - KRAKEN_API_KEY=${KRAKEN_API_KEY:-}
+            - KRAKEN_API_SECRET=${KRAKEN_API_SECRET:-}
+
+            # ----------------------------------------------------------------
+            # Dataset generation defaults
+            # Kraken spot crypto symbols (BTC/ETH/SOL/etc.) are included by
+            # default alongside CME futures. They are resolved via the
+            # DataResolver → Kraken REST API with automatic Postgres/Redis
+            # backfill so subsequent training runs hit the warm cache.
+            # ----------------------------------------------------------------
+            - CNN_RETRAIN_SYMBOLS=${CNN_RETRAIN_SYMBOLS:-MGC,SIL,MES,MNQ,M2K,MYM,ZN,ZB,ZW}
+            - CNN_RETRAIN_DAYS_BACK=${CNN_RETRAIN_DAYS_BACK:-180}
+            - CNN_RETRAIN_BARS_SOURCE=${CNN_RETRAIN_BARS_SOURCE:-massive}
+            - CNN_RETRAIN_ORB_SESSION=${CNN_RETRAIN_ORB_SESSION:-all}
+            - CNN_ORB_SESSION=${CNN_ORB_SESSION:-all}
+
+            # ----------------------------------------------------------------
+            # Python / runtime
+            # ----------------------------------------------------------------
+            - PYTHONPATH=/app/src
+            - PYTHONUNBUFFERED=1
+
+            # NVIDIA container toolkit
+            - NVIDIA_VISIBLE_DEVICES=all
+            - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+
+        volumes:
+            # Bind-mounts — files land directly on the host so rsync can
+            # pull models/ without any docker cp / volume-export dance.
+            # The host directories are created automatically by Docker Compose
+            # if they don't already exist.
+            - ./models:/app/models
+            - ./dataset:/app/dataset
+            - ./data:/app/data
+            - ./scripts:/app/scripts
+            - ./src:/app/src
+
+        # Default command: run the persistent HTTP training server.
+        # The server starts up immediately and waits for POST /train.
+        #
+        # Override to run a one-shot training run directly:
+        #   docker compose --profile training run --rm trainer \
+        #       python -m lib.services.training.trainer_server
+        command: ["python", "-m", "lib.services.training.trainer_server"]
+
+        healthcheck:
+            test:
+                [
+                    "CMD",
+                    "python",
+                    "-c",
+                    "import urllib.request; urllib.request.urlopen('http://localhost:8200/health')",
+                ]
+            interval: 30s
+            timeout: 10s
+            start_period: 60s
+            retries: 3
+
+    # -------------------------------------------------------------------------
+    # Prometheus — Metrics collection & alerting
+    # Config is baked into the image via docker/monitoring/prometheus/Dockerfile.
+    # UI at http://localhost:9095
+    # -------------------------------------------------------------------------
+    prometheus:
+        image: nuniesmith/futures:prometheus
+        build:
+            context: .
+            dockerfile: docker/monitoring/prometheus/Dockerfile
+        restart: unless-stopped
+        ports:
+            - "9095:9090"
+        volumes:
+            - prometheus_data:/prometheus
+        command:
+            - "--config.file=/etc/prometheus/prometheus.yml"
+            - "--storage.tsdb.path=/prometheus"
+            - "--storage.tsdb.retention.time=30d"
+            - "--web.console.libraries=/etc/prometheus/console_libraries"
+            - "--web.console.templates=/etc/prometheus/consoles"
+            - "--web.enable-lifecycle"
+
+        depends_on:
+            data:
+                condition: service_healthy
+
+    # -------------------------------------------------------------------------
+    # Grafana — Dashboards & visualization
+    # Provisioning configs and dashboards are baked into the image via
+    # docker/monitoring/grafana/Dockerfile.
+    # UI at http://localhost:3010  (admin / admin on first login)
+    # -------------------------------------------------------------------------
+    grafana:
+        image: nuniesmith/futures:grafana
+        build:
+            context: .
+            dockerfile: docker/monitoring/grafana/Dockerfile
+        restart: unless-stopped
+        ports:
+            - "3010:3000"
+        environment:
+            - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+            - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+            - GF_USERS_ALLOW_SIGN_UP=false
+        volumes:
+            - grafana_data:/var/lib/grafana
+        depends_on:
+            - prometheus
+
+volumes:
+    postgres_data:
+    redis_data:
+    app_data:
+    prometheus_data:
+    grafana_data:
+
+# =============================================================================
+# Build notes
+# =============================================================================
+#
+# Normal workflow (source-only change — base cache reused):
+#   docker compose build data engine web
+#   docker compose up -d
+#
+# After changing pyproject.toml (new/updated dependency):
+#   docker compose build base          # reinstalls all deps (~2–5 min once)
+#   docker compose build data engine web  # copies new site-packages (~10s each)
+#   docker compose up -d
+#
+# Full clean rebuild from scratch:
+#   docker compose build --no-cache base
+#   docker compose build data engine web
+#
+# The trainer image is independent (CUDA base + [gpu] extras) and is built
+# separately:
+#   docker compose --profile training build trainer
+# =============================================================================

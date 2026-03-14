@@ -1,0 +1,60 @@
+# =============================================================================
+# Docker build context exclusions
+# =============================================================================
+
+# --- Version control ---
+.git
+.gitignore
+
+# --- Python ---
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.egg-info
+dist/
+build/
+
+# --- IDE / Editor ---
+.idea
+.vscode
+*.swp
+*.swo
+*~
+
+# --- Claude / AI ---
+.claude
+
+# --- Environment & secrets ---
+.env
+.env.*
+
+# --- Documentation (not needed in images) ---
+*.md
+!README.md
+LICENSE
+
+# --- Tests (not needed in production images) ---
+src/tests/
+
+# --- Scripts (host-only) ---
+run.sh
+run.train.sh
+
+# --- Models (bind-mounted at runtime, not baked into image) ---
+models/
+
+# --- Data & logs ---
+*.db
+*.sqlite
+*.log
+data/
+dataset/
+
+# --- OS junk ---
+.DS_Store
+Thumbs.db
+
+# --- Ruff / pytest caches ---
+.ruff_cache/
+.pytest_cache/

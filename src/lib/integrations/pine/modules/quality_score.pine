@@ -1,0 +1,14 @@
+// ── Module: quality_score ───────────────────────────────────────────────────
+// Part of the Ruby indicator — assembled by PineScriptGenerator
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 8. QUALITY SCORE  (0 – 100)
+// ══════════════════════════════════════════════════════════════════════════════
+quality = 0.0
+quality += (bullBias and ao > ao[1])       or (not bullBias and ao < ao[1])       ? 20.0 : 0.0
+quality += (close > ema9 and bullBias)     or (close < ema9 and not bullBias)     ? 15.0 : 0.0
+quality += (bullBias and close > vwap)     or (not bullBias and close < vwap)     ? 20.0 : 0.0
+quality += volume > volAvg * volMult                                               ? 25.0 : 0.0
+quality += rangeReady and ((bullBias and close > rHigh) or
+           (not bullBias and close < rLow))                                        ? 20.0 : 0.0
+quality := math.min(100.0, math.max(0.0, quality))

@@ -1,0 +1,103 @@
+# =============================================================================
+# Prometheus Configuration — Futures Trading Co-Pilot
+# =============================================================================
+#
+# Scrapes metrics from the data-service at /metrics/prometheus.
+#
+# Usage:
+#   Add the prometheus service to docker-compose.yml:
+#     prometheus:
+#       image: prom/prometheus:v2.53.0
+#       volumes:
+#         - ./docker/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+#         - prometheus_data:/prometheus
+#       ports:
+#         - "9090:9090"
+#       depends_on:
+#         data:
+#           condition: service_healthy
+#
+# =============================================================================
+
+# =============================================================================
+# Alert Rules
+# =============================================================================
+rule_files:
+    - /etc/prometheus/alert_rules.yml
+
+global:
+    scrape_interval: 15s
+    evaluation_interval: 15s
+    scrape_timeout: 10s
+
+    external_labels:
+        cluster: "futures-copilot"
+        environment: "production"
+
+# =============================================================================
+# Scrape Configs
+# =============================================================================
+scrape_configs:
+    # ---------------------------------------------------------------------------
+    # Data Service — FastAPI metrics (request count, latency, SSE, etc.)
+    # ---------------------------------------------------------------------------
+    - job_name: "data-service"
+      metrics_path: /metrics/prometheus
+      scrape_interval: 10s
+      static_configs:
+          - targets: ["engine:8000"]
+            labels:
+                service: "data-service"
+                component: "api"
+
+      # If API key auth is enabled, add it here:
+      # authorization:
+      #   type: "ApiKey"
+      #   credentials: "${API_KEY}"
+      # Or use headers via a relabel/proxy approach.
+
+    # ---------------------------------------------------------------------------
+    # Trainer — GPU CNN training server metrics
+    # ---------------------------------------------------------------------------
+    # The trainer exposes Prometheus text-format metrics at /metrics/prometheus
+    # including: trainer_up, trainer_uptime_seconds, trainer_status (labelled),
+    # trainer_gpu_available, trainer_gpu_memory_total_bytes,
+    # trainer_champion_exists, trainer_last_run_accuracy/precision/recall,
+    # trainer_last_run_promoted, trainer_last_run_images.
+    # ---------------------------------------------------------------------------
+    - job_name: "trainer"
+      metrics_path: /metrics/prometheus
+      scrape_interval: 30s
+      scrape_timeout: 10s
+      static_configs:
+          - targets: ["trainer:8200"]
+            labels:
+                service: "trainer"
+                component: "training"
+
+    # ---------------------------------------------------------------------------
+    # Prometheus self-monitoring
+    # ---------------------------------------------------------------------------
+    - job_name: "prometheus"
+      static_configs:
+          - targets: ["localhost:9090"]
+            labels:
+                service: "prometheus"
+
+    # ---------------------------------------------------------------------------
+    # Redis Exporter (optional — add oliver006/redis_exporter to compose)
+    # ---------------------------------------------------------------------------
+    # - job_name: "redis"
+    #   static_configs:
+    #     - targets: ["redis-exporter:9121"]
+    #       labels:
+    #         service: "redis"
+
+    # ---------------------------------------------------------------------------
+    # Postgres Exporter (optional — add prometheuscommunity/postgres-exporter)
+    # ---------------------------------------------------------------------------
+    # - job_name: "postgres"
+    #   static_configs:
+    #     - targets: ["postgres-exporter:9187"]
+    #       labels:
+    #         service: "postgres"

@@ -1,0 +1,30 @@
+// ── Module: market_regime ───────────────────────────────────────────────────
+// Part of the Ruby indicator — assembled by PineScriptGenerator
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 5. MARKET REGIME + PHASE
+// ══════════════════════════════════════════════════════════════════════════════
+ma_200    = ta.sma(close, 200)
+avg_chg   = ta.sma(math.abs(ta.change(ma_200)), 100)
+slope_n   = avg_chg == 0 ? 0.0 : (ma_200 - nz(ma_200[20], ma_200)) / (avg_chg * 20)
+ret_s     = ta.stdev(ta.change(close) / nz(close[1], close), 100)
+ret_sma   = ta.sma(ret_s, 50)
+vol_n     = ret_sma == 0 ? 1.0 : ret_s / ret_sma
+
+market_regime = slope_n >  1.0 ? "TRENDING ↑" : slope_n < -1.0 ? "TRENDING ↓" : vol_n   >  1.5 ? "VOLATILE"   : vol_n   <  0.8 ? "RANGING"    : "NEUTRAL"
+
+var string market_phase = "NEUTRAL"
+var color  phase_col    = color.gray
+
+if ta.crossover(close, tg_hi[10]) and ao > 0
+    market_phase := "UPTREND"
+    phase_col    := color.lime
+if ta.crossunder(close, tg_lo[10]) and ao < 0
+    market_phase := "DOWNTREND"
+    phase_col    := color.red
+if close > tg_hi[5] and close < tg_hi and ao > 0 and ao < ao[10]
+    market_phase := "DISTRIB"
+    phase_col    := color.orange
+if close < tg_lo[5] and close > tg_lo and ao < 0 and ao > ao[10]
+    market_phase := "ACCUM"
+    phase_col    := color.yellow

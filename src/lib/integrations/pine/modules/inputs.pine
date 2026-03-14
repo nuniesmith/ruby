@@ -1,0 +1,43 @@
+// ── Module: inputs ──────────────────────────────────────────────────────────
+// Part of the Ruby indicator — assembled by PineScriptGenerator
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 1. SETTINGS
+// ══════════════════════════════════════════════════════════════════════════════
+
+var g1 = "⚙️ Strategy"
+biasMode      = input.string("Auto",  "Session Bias",
+     options=["Auto","Long Only","Short Only"],       group=g1)
+requireVWAP   = input.bool(true,  "Require VWAP Alignment",         group=g1)
+orbMinutes    = input.int(5,      "ORB Minutes", minval=1, maxval=120, group=g1)
+volMult       = input.float(1.2,  "Volume Spike ×",  minval=0.8, step=0.05, group=g1)
+minQualityPct = input.int(45,     "Min Quality %",   minval=30,  maxval=95,  group=g1)
+htfTF         = input.string("3", "HTF Timeframe",
+     options=["3","5","10","15","30","60"],           group=g1)
+tp1R          = input.float(1.5,  "TP1 (R ×)",       minval=0.5, step=0.25, group=g1)
+tp2R          = input.float(2.5,  "TP2 (R ×)",       minval=1.0, step=0.25, group=g1)
+tp3R          = input.float(4.0,  "TP3 (R ×)",       minval=2.0, step=0.5,  group=g1)
+sessionHours  = input.string("0000-0000", "Session Hours (RTH)",
+     tooltip="HHMM-HHMM in the exchange timezone. Set to 0000-0000 and disable session filter for 24/7 assets (crypto, forex).",
+     group=g1)
+useSession    = input.bool(true,  "Use Session Filter",
+     tooltip="Disable for 24/7 markets — crypto, FX, or any asset without a fixed session.",
+     group=g1)
+ibMinutes     = input.int(60,     "IB Minutes",      minval=15, maxval=480, group=g1)
+
+var g2 = "📊 Top G Channel"
+topGLen            = input.int(50,   "Channel Length",         minval=10,          group=g2)
+showMid            = input.bool(true,"Show Mid Line",                              group=g2)
+sigSens            = input.float(0.5,"Signal Sensitivity",     minval=0.1, maxval=2.0, step=0.1, group=g2)
+showTGDots         = input.bool(true, "Show Strong TG Dots",                       group=g2)
+showSimpleDots     = input.bool(true, "Show Simple Touch Dots",                    group=g2)
+showPotDots        = input.bool(false,"Show Potential Zone Dots",                  group=g2)
+showBreakoutLabels = input.bool(true, "Show Breakout Entry Labels",                group=g2)
+
+var g3 = "🎨 Display"
+showVWAP        = input.bool(true,  "Show VWAP",          group=g3)
+showEMA9        = input.bool(true,  "Show EMA9",          group=g3)
+showDash        = input.bool(true,  "Show Dashboard",     group=g3)
+showEntryLabels = input.bool(true,  "Show Entry Labels",  group=g3)
+dashPos_str     = input.string("Top Right", "Dashboard Position",
+     options=["Top Right","Bottom Right","Top Left","Bottom Left"], group=g3)

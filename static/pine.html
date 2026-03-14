@@ -1,0 +1,1619 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>🌲 Pine Script Generator — Ruby Futures</title>
+        <link
+            rel="icon"
+            href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌲</text></svg>"
+        />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link
+            href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Inter:wght@400;500;600;700&family=Syne:wght@400;600;700;800&display=swap"
+            rel="stylesheet"
+        />
+        <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+        <style>
+            :root {
+                --bg-main: #0f1117;
+                --bg-card: #1e222d;
+                --bg-input: #171b24;
+                --bg-sidebar: #13151f;
+                --bg-topbar: #13151f;
+                --bg-hover: #252a3a;
+                --bg-active: #2a3040;
+                --border: #2a2f3a;
+                --border-light: #353b4e;
+                --text: #e6eaf0;
+                --text-dim: #8a919c;
+                --text-muted: #4b5580;
+                --accent: #00ffff;
+                --accent-bg: rgba(0, 255, 255, 0.08);
+                --accent-border: rgba(0, 255, 255, 0.25);
+                --green: #00e676;
+                --green-bg: rgba(0, 230, 118, 0.08);
+                --red: #ff1744;
+                --red-bg: rgba(255, 23, 68, 0.08);
+                --amber: #ffab00;
+                --amber-bg: rgba(255, 171, 0, 0.08);
+                --purple: #a78bfa;
+                --blue: #3b9eff;
+                --mono: "JetBrains Mono", "Fira Code", monospace;
+                --sans: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+                --head: "Syne", sans-serif;
+            }
+
+            *,
+            *::before,
+            *::after {
+                box-sizing: border-box;
+                margin: 0;
+                padding: 0;
+            }
+
+            html,
+            body {
+                height: 100%;
+                background: var(--bg-main);
+                color: var(--text);
+                font-family: var(--sans);
+                overflow: hidden;
+                font-size: 14px;
+            }
+
+            ::-webkit-scrollbar {
+                width: 5px;
+                height: 5px;
+            }
+            ::-webkit-scrollbar-track {
+                background: var(--bg-sidebar);
+            }
+            ::-webkit-scrollbar-thumb {
+                background: var(--border-light);
+                border-radius: 3px;
+            }
+
+            /* ── Layout ───────────────────────────────────────────── */
+            #app {
+                display: grid;
+                grid-template-rows: 48px 1fr;
+                height: 100vh;
+            }
+
+            #topbar {
+                background: var(--bg-topbar);
+                border-bottom: 1px solid var(--border);
+                display: flex;
+                align-items: center;
+                padding: 0 20px;
+                gap: 16px;
+                z-index: 100;
+            }
+
+            .logo {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                font-family: var(--head);
+                font-weight: 800;
+                font-size: 15px;
+                letter-spacing: 0.1em;
+                color: #fff;
+                flex-shrink: 0;
+            }
+
+            .logo-dot {
+                width: 8px;
+                height: 8px;
+                border-radius: 50%;
+                background: var(--accent);
+                box-shadow: 0 0 10px var(--accent);
+                animation: pulse 2s infinite;
+            }
+
+            @keyframes pulse {
+                0%,
+                100% {
+                    opacity: 1;
+                }
+                50% {
+                    opacity: 0.5;
+                }
+            }
+
+            .topbar-title {
+                font-size: 12px;
+                color: var(--text-dim);
+                letter-spacing: 0.06em;
+                font-weight: 600;
+                font-family: var(--mono);
+            }
+
+            .topbar-right {
+                margin-left: auto;
+                display: flex;
+                align-items: center;
+                gap: 14px;
+            }
+
+            .topbar-link {
+                font-size: 12px;
+                color: var(--text-dim);
+                text-decoration: none;
+                letter-spacing: 0.04em;
+                transition: color 0.15s;
+                font-weight: 500;
+                font-family: var(--mono);
+                padding: 6px 12px;
+                border: 1px solid var(--border);
+                border-radius: 6px;
+                background: var(--bg-card);
+            }
+            .topbar-link:hover {
+                color: var(--accent);
+                border-color: var(--accent);
+            }
+
+            .topbar-status {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                font-size: 10px;
+                color: var(--text-muted);
+                font-family: var(--mono);
+            }
+
+            #main {
+                display: grid;
+                grid-template-columns: 260px 1fr;
+                overflow: hidden;
+            }
+
+            /* ── Sidebar ──────────────────────────────────────────── */
+            #sidebar {
+                background: var(--bg-sidebar);
+                border-right: 1px solid var(--border);
+                display: flex;
+                flex-direction: column;
+                overflow: hidden;
+            }
+
+            .sidebar-section {
+                border-bottom: 1px solid var(--border);
+            }
+
+            .sidebar-header {
+                padding: 10px 14px;
+                font-size: 10px;
+                font-weight: 700;
+                letter-spacing: 0.1em;
+                text-transform: uppercase;
+                color: var(--text-muted);
+                background: var(--bg-card);
+                border-bottom: 1px solid var(--border);
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                font-family: var(--mono);
+            }
+
+            .sidebar-header .count {
+                background: var(--border);
+                color: var(--accent);
+                padding: 1px 7px;
+                border-radius: 3px;
+                font-size: 10px;
+            }
+
+            #module-list {
+                overflow-y: auto;
+                flex: 1;
+            }
+
+            .mod-item {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 8px 14px;
+                border-bottom: 1px solid rgba(42, 47, 58, 0.5);
+                cursor: pointer;
+                transition: background 0.12s;
+                font-size: 12px;
+                font-family: var(--mono);
+            }
+            .mod-item:hover {
+                background: var(--bg-hover);
+            }
+            .mod-item.active {
+                background: var(--bg-active);
+                border-left: 2px solid var(--accent);
+            }
+
+            .mod-icon {
+                font-size: 10px;
+                margin-right: 6px;
+                opacity: 0.6;
+            }
+
+            .mod-name {
+                color: var(--accent);
+                font-weight: 500;
+                font-size: 12px;
+            }
+            .mod-meta {
+                color: var(--text-muted);
+                font-size: 10px;
+            }
+
+            /* Sidebar actions */
+            .sidebar-actions {
+                padding: 12px 14px;
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+            }
+
+            /* Sidebar stats */
+            .sidebar-stats {
+                padding: 12px 14px;
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 6px;
+            }
+
+            .mini-stat {
+                background: var(--bg-card);
+                border: 1px solid var(--border);
+                border-radius: 4px;
+                padding: 8px 10px;
+            }
+
+            .mini-stat-label {
+                font-size: 9px;
+                letter-spacing: 0.1em;
+                text-transform: uppercase;
+                color: var(--text-muted);
+                margin-bottom: 3px;
+                font-weight: 600;
+                font-family: var(--mono);
+            }
+
+            .mini-stat-value {
+                font-size: 16px;
+                font-weight: 700;
+                font-family: var(--mono);
+                color: var(--accent);
+            }
+            .mini-stat-value.green {
+                color: var(--green);
+            }
+            .mini-stat-value.amber {
+                color: var(--amber);
+            }
+
+            /* ── Buttons ──────────────────────────────────────────── */
+            .btn {
+                font-family: var(--mono);
+                font-size: 11px;
+                font-weight: 600;
+                letter-spacing: 0.04em;
+                padding: 8px 16px;
+                border-radius: 6px;
+                cursor: pointer;
+                transition: all 0.2s;
+                outline: none;
+                border: 1px solid var(--border);
+                background: var(--bg-card);
+                color: var(--text);
+                text-align: center;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                gap: 6px;
+                text-decoration: none;
+            }
+            .btn:hover {
+                border-color: var(--accent);
+                color: var(--accent);
+            }
+
+            .btn-primary {
+                background: var(--accent);
+                border-color: var(--accent);
+                color: #000;
+                font-weight: 700;
+            }
+            .btn-primary:hover {
+                opacity: 0.9;
+            }
+            .btn-primary:disabled {
+                opacity: 0.5;
+                cursor: not-allowed;
+            }
+
+            .btn-sm {
+                padding: 5px 10px;
+                font-size: 10px;
+            }
+
+            .btn-green {
+                background: var(--green);
+                border-color: var(--green);
+                color: #000;
+                font-weight: 700;
+            }
+            .btn-green:hover {
+                opacity: 0.9;
+            }
+
+            .btn-ghost {
+                background: transparent;
+                border-color: var(--border);
+                color: var(--text-dim);
+            }
+            .btn-ghost:hover {
+                border-color: var(--accent);
+                color: var(--accent);
+            }
+
+            /* Download strip in sidebar */
+            .download-strip {
+                padding: 10px 14px;
+                border-top: 1px solid var(--border);
+                background: var(--bg-card);
+            }
+            .download-strip a {
+                color: var(--accent);
+                text-decoration: none;
+                font-size: 11px;
+                font-weight: 600;
+                font-family: var(--mono);
+                display: flex;
+                align-items: center;
+                gap: 6px;
+            }
+            .download-strip a:hover {
+                text-decoration: underline;
+            }
+            .download-info {
+                font-size: 10px;
+                color: var(--text-muted);
+                margin-top: 2px;
+                font-family: var(--mono);
+            }
+
+            /* ── Content area ─────────────────────────────────────── */
+            #content {
+                overflow-y: auto;
+                overflow-x: hidden;
+                padding: 16px;
+                display: flex;
+                flex-direction: column;
+                gap: 16px;
+            }
+
+            /* Cards */
+            .card {
+                background: var(--bg-card);
+                border: 1px solid var(--border);
+                border-radius: 8px;
+                overflow: hidden;
+            }
+
+            .card-head {
+                background: var(--bg-hover);
+                border-bottom: 1px solid var(--border);
+                padding: 10px 16px;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+            }
+
+            .card-label {
+                font-size: 11px;
+                font-weight: 700;
+                letter-spacing: 0.08em;
+                text-transform: uppercase;
+                color: var(--text-dim);
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                font-family: var(--mono);
+            }
+
+            .card-accent {
+                width: 3px;
+                height: 14px;
+                border-radius: 2px;
+            }
+
+            .card-body {
+                padding: 16px;
+            }
+
+            .card-body.no-pad {
+                padding: 0;
+            }
+
+            /* ── Viewer filename bar ──────────────────────────────── */
+            .viewer-bar {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                padding: 8px 16px;
+                background: var(--bg-sidebar);
+                border-bottom: 1px solid var(--border);
+                font-family: var(--mono);
+            }
+
+            .viewer-filename {
+                font-size: 12px;
+                color: var(--accent);
+                font-weight: 600;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            }
+            .viewer-filename .dim {
+                color: var(--text-muted);
+                font-weight: 400;
+                font-size: 11px;
+            }
+
+            /* ── Code viewer ──────────────────────────────────────── */
+            pre.pine-code {
+                background: #0b0d14;
+                border: 1px solid var(--border);
+                border-radius: 6px;
+                padding: 0;
+                overflow-x: auto;
+                font-family: var(--mono);
+                font-size: 13px;
+                line-height: 1.5;
+                color: #d4d4d4;
+                max-height: 500px;
+                overflow-y: auto;
+                margin: 0;
+            }
+
+            .code-wrapper {
+                display: flex;
+                min-height: 100%;
+            }
+
+            .line-nums {
+                padding: 14px 0;
+                text-align: right;
+                user-select: none;
+                color: var(--text-muted);
+                font-size: 11px;
+                line-height: 1.5;
+                min-width: 42px;
+                padding-right: 12px;
+                padding-left: 8px;
+                border-right: 1px solid var(--border);
+                background: var(--bg-sidebar);
+                flex-shrink: 0;
+                font-family: var(--mono);
+            }
+
+            .code-content {
+                padding: 14px;
+                white-space: pre;
+                overflow-x: auto;
+                flex: 1;
+                font-family: var(--mono);
+                font-size: 12px;
+                line-height: 1.5;
+                color: #d4d4d4;
+                tab-size: 4;
+            }
+
+            /* Pine Script keyword highlighting */
+            .code-content .kw {
+                color: #569cd6;
+            }
+            .code-content .fn {
+                color: #dcdcaa;
+            }
+            .code-content .str {
+                color: #ce9178;
+            }
+            .code-content .num {
+                color: #b5cea8;
+            }
+            .code-content .cmt {
+                color: #6a9955;
+            }
+            .code-content .type {
+                color: #4ec9b0;
+            }
+            .code-content .var {
+                color: #9cdcfe;
+            }
+
+            /* ── Params editor ────────────────────────────────────── */
+            .params-wrap {
+                position: relative;
+            }
+
+            .params-toolbar {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                padding: 8px 16px;
+                background: var(--bg-hover);
+                border-bottom: 1px solid var(--border);
+                font-family: var(--mono);
+            }
+
+            .params-toolbar-label {
+                font-size: 10px;
+                color: var(--text-muted);
+                letter-spacing: 0.08em;
+                font-weight: 600;
+                text-transform: uppercase;
+            }
+
+            #params-editor {
+                width: 100%;
+                min-height: 280px;
+                background: var(--bg-input);
+                color: var(--text);
+                border: none;
+                resize: vertical;
+                outline: none;
+                font-family: var(--mono);
+                font-size: 12px;
+                line-height: 1.55;
+                padding: 14px 16px;
+                tab-size: 2;
+            }
+
+            .params-actions {
+                padding: 10px 16px;
+                display: flex;
+                gap: 8px;
+                border-top: 1px solid var(--border);
+                background: var(--bg-hover);
+            }
+
+            /* ── Output files ─────────────────────────────────────── */
+            .output-file-row {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 10px 14px;
+                background: var(--bg-sidebar);
+                border: 1px solid var(--border);
+                border-radius: 6px;
+                margin-bottom: 8px;
+                font-size: 12px;
+                font-family: var(--mono);
+            }
+            .output-file-name {
+                color: var(--accent);
+                font-weight: 600;
+            }
+            .output-file-meta {
+                color: var(--text-muted);
+                font-size: 10px;
+                margin-top: 2px;
+            }
+            .output-file-actions {
+                display: flex;
+                gap: 6px;
+            }
+
+            /* ── Generate result ──────────────────────────────────── */
+            #gen-result {
+                min-height: 20px;
+                transition: all 0.3s;
+            }
+            .gen-ok {
+                color: var(--green);
+                background: var(--green-bg);
+                border: 1px solid rgba(0, 230, 118, 0.2);
+                border-radius: 6px;
+                padding: 10px 14px;
+                font-size: 12px;
+                font-family: var(--mono);
+            }
+            .gen-err {
+                color: var(--red);
+                background: var(--red-bg);
+                border: 1px solid rgba(255, 23, 68, 0.2);
+                border-radius: 6px;
+                padding: 10px 14px;
+                font-size: 12px;
+                font-family: var(--mono);
+            }
+
+            /* ── Status indicator ─────────────────────────────────── */
+            .status-dot {
+                width: 7px;
+                height: 7px;
+                border-radius: 50%;
+                display: inline-block;
+                margin-right: 4px;
+            }
+            .status-dot.ok {
+                background: var(--green);
+                box-shadow: 0 0 6px var(--green);
+            }
+            .status-dot.warn {
+                background: var(--amber);
+                box-shadow: 0 0 6px var(--amber);
+            }
+            .status-dot.off {
+                background: #555;
+            }
+
+            /* ── Placeholder / empty state ────────────────────────── */
+            .placeholder {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                color: var(--text-muted);
+                font-size: 13px;
+                flex-direction: column;
+                gap: 8px;
+                padding: 40px 20px;
+                font-family: var(--mono);
+            }
+            .placeholder-icon {
+                font-size: 36px;
+                opacity: 0.5;
+            }
+
+            /* ── HTMX indicators ──────────────────────────────────── */
+            .htmx-indicator {
+                display: none;
+            }
+            .htmx-request .htmx-indicator,
+            .htmx-request.htmx-indicator {
+                display: inline-block;
+            }
+
+            /* ── Spinner ──────────────────────────────────────────── */
+            .spinner {
+                display: inline-block;
+                width: 14px;
+                height: 14px;
+                border: 2px solid var(--border);
+                border-top-color: var(--accent);
+                border-radius: 50%;
+                animation: spin 0.6s linear infinite;
+            }
+            @keyframes spin {
+                to {
+                    transform: rotate(360deg);
+                }
+            }
+
+            /* ── Toast notifications ──────────────────────────────── */
+            .toast {
+                position: fixed;
+                bottom: 20px;
+                right: 20px;
+                padding: 10px 18px;
+                border-radius: 6px;
+                font-size: 12px;
+                font-weight: 600;
+                z-index: 9999;
+                transition: opacity 0.3s;
+                font-family: var(--mono);
+                box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+            }
+            .toast-ok {
+                background: #0a2a1a;
+                color: var(--green);
+                border: 1px solid var(--green);
+            }
+            .toast-err {
+                background: #2a0a0a;
+                color: var(--red);
+                border: 1px solid var(--red);
+            }
+
+            /* ── Section divider ──────────────────────────────────── */
+            .section-divider {
+                border: none;
+                border-top: 1px solid var(--border);
+                margin: 0;
+            }
+
+            /* ── Generated preview card ───────────────────────────── */
+            #generated-viewer pre.pine-code {
+                max-height: 400px;
+            }
+
+            /* ── Responsive ───────────────────────────────────────── */
+            @media (max-width: 900px) {
+                #main {
+                    grid-template-columns: 1fr;
+                }
+                #sidebar {
+                    display: none;
+                }
+            }
+
+            /* ── Sidebar last-poll strip ──────────────────────────── */
+            .poll-strip {
+                padding: 6px 14px;
+                font-size: 9px;
+                color: var(--text-muted);
+                border-top: 1px solid var(--border);
+                font-family: var(--mono);
+                display: flex;
+                align-items: center;
+                gap: 6px;
+            }
+
+            /* ── Empty module list loader ─────────────────────────── */
+            .mod-loading {
+                padding: 30px 0;
+                text-align: center;
+                color: var(--text-muted);
+                font-size: 11px;
+                font-family: var(--mono);
+            }
+
+            /* ── Stat card with full span ─────────────────────────── */
+            .mini-stat.full {
+                grid-column: 1 / -1;
+            }
+
+            /* ── Module order tags ────────────────────────────────── */
+            .mod-tag {
+                color: var(--accent);
+                background: var(--accent-bg);
+                padding: 2px 6px;
+                border-radius: 3px;
+                margin: 2px;
+                display: inline-block;
+                font-size: 10px;
+                font-family: var(--mono);
+            }
+        </style>
+    </head>
+    <body>
+        <div id="app">
+            <!-- ─── Top Bar ───────────────────────────────────────── -->
+            <header id="topbar">
+                <div class="logo">
+                    <div class="logo-dot"></div>
+                    <span>RUBY</span>
+                </div>
+                <span class="topbar-title">🌲 PINE SCRIPT GENERATOR</span>
+                <div class="topbar-right">
+                    <span
+                        class="topbar-status"
+                        hx-get="/api/pine/status/html"
+                        hx-trigger="load, every 60s"
+                        hx-swap="innerHTML"
+                    >
+                        <span class="status-dot ok"></span>
+                        <span>READY</span>
+                    </span>
+                    <a href="/" class="topbar-link">← Dashboard</a>
+                </div>
+            </header>
+
+            <!-- ─── Main Layout ───────────────────────────────────── -->
+            <div id="main">
+                <!-- ─── Sidebar ───────────────────────────────────── -->
+                <aside id="sidebar">
+                    <!-- Module list section -->
+                    <div
+                        class="sidebar-section"
+                        style="
+                            flex: 1;
+                            display: flex;
+                            flex-direction: column;
+                            overflow: hidden;
+                        "
+                    >
+                        <div class="sidebar-header">
+                            <span>Modules</span>
+                            <span class="count" id="module-count">—</span>
+                        </div>
+                        <div id="module-list" style="flex: 1; overflow-y: auto">
+                            <div class="mod-loading">
+                                <div
+                                    class="spinner"
+                                    style="margin: 0 auto 8px"
+                                ></div>
+                                <div>Loading modules…</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Actions section -->
+                    <div class="sidebar-section">
+                        <div class="sidebar-header"><span>Actions</span></div>
+                        <div class="sidebar-actions">
+                            <button
+                                class="btn btn-primary"
+                                id="generate-btn"
+                                onclick="doGenerate()"
+                            >
+                                ▶ Generate
+                            </button>
+                            <button
+                                class="btn btn-ghost"
+                                id="download-btn"
+                                onclick="downloadLatest()"
+                            >
+                                ⬇ Download
+                            </button>
+                        </div>
+                        <div id="gen-result" style="padding: 0 14px 10px"></div>
+                    </div>
+
+                    <!-- Download strip -->
+                    <div class="download-strip" id="download-strip">
+                        <div style="font-size: 10px; color: var(--text-muted)">
+                            No output files yet
+                        </div>
+                    </div>
+
+                    <!-- Stats section -->
+                    <div class="sidebar-section">
+                        <div class="sidebar-header"><span>Stats</span></div>
+                        <div class="sidebar-stats" id="stats-grid">
+                            <div class="mini-stat">
+                                <div class="mini-stat-label">Modules</div>
+                                <div class="mini-stat-value" id="stat-modules">
+                                    —
+                                </div>
+                            </div>
+                            <div class="mini-stat">
+                                <div class="mini-stat-label">Lines</div>
+                                <div
+                                    class="mini-stat-value green"
+                                    id="stat-lines"
+                                >
+                                    —
+                                </div>
+                            </div>
+                            <div class="mini-stat">
+                                <div class="mini-stat-label">Size</div>
+                                <div
+                                    class="mini-stat-value amber"
+                                    id="stat-size"
+                                >
+                                    —
+                                </div>
+                            </div>
+                            <div class="mini-stat">
+                                <div class="mini-stat-label">Type</div>
+                                <div
+                                    class="mini-stat-value"
+                                    id="stat-type"
+                                    style="font-size: 12px"
+                                >
+                                    —
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Poll strip -->
+                    <div
+                        class="poll-strip"
+                        hx-get="/api/pine/status/html"
+                        hx-trigger="every 60s"
+                        hx-swap="none"
+                        hx-on::after-request="updateTimestamp()"
+                    >
+                        <span id="last-poll">—</span>
+                    </div>
+                </aside>
+
+                <!-- ─── Content Area ──────────────────────────────── -->
+                <div id="content">
+                    <!-- ═══ MODULE CONTENT VIEWER ═══ -->
+                    <div class="card" id="module-viewer">
+                        <div class="card-head">
+                            <div class="card-label">
+                                <div
+                                    class="card-accent"
+                                    style="background: var(--accent)"
+                                ></div>
+                                Module Content Viewer
+                            </div>
+                            <div class="viewer-filename" id="viewer-filename">
+                                <span class="dim"
+                                    >← Select a module from the sidebar</span
+                                >
+                            </div>
+                        </div>
+                        <div class="card-body no-pad" id="module-content">
+                            <div class="placeholder" style="min-height: 300px">
+                                <span class="placeholder-icon">🌲</span>
+                                <span
+                                    >Click a module in the sidebar to view its
+                                    Pine Script source</span
+                                >
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ═══ PARAMS EDITOR ═══ -->
+                    <div class="card" id="params-card">
+                        <div class="card-head">
+                            <div class="card-label">
+                                <div
+                                    class="card-accent"
+                                    style="background: var(--amber)"
+                                ></div>
+                                Params Editor
+                            </div>
+                            <span
+                                style="
+                                    font-size: 10px;
+                                    color: var(--text-muted);
+                                    font-family: var(--mono);
+                                "
+                                >params.yaml</span
+                            >
+                        </div>
+                        <div class="params-wrap">
+                            <textarea
+                                id="params-editor"
+                                spellcheck="false"
+                                placeholder="Loading params.yaml…"
+                            ></textarea>
+                        </div>
+                        <div class="params-actions">
+                            <button
+                                class="btn btn-green btn-sm"
+                                onclick="saveParams()"
+                            >
+                                💾 Save Params
+                            </button>
+                            <button
+                                class="btn btn-ghost btn-sm"
+                                onclick="resetParams()"
+                            >
+                                ↺ Reset
+                            </button>
+                            <span
+                                style="
+                                    margin-left: auto;
+                                    font-size: 10px;
+                                    color: var(--text-muted);
+                                    font-family: var(--mono);
+                                "
+                            >
+                                Ctrl+S to save
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- ═══ OUTPUT FILES ═══ -->
+                    <div class="card" id="output-card">
+                        <div class="card-head">
+                            <div class="card-label">
+                                <div
+                                    class="card-accent"
+                                    style="background: var(--green)"
+                                ></div>
+                                Output Files
+                            </div>
+                            <button
+                                class="btn btn-ghost btn-sm"
+                                onclick="loadOutputFiles()"
+                            >
+                                ↻ Refresh
+                            </button>
+                        </div>
+                        <div class="card-body" id="output-list">
+                            <div class="placeholder" style="padding: 20px 0">
+                                <span
+                                    >No output files yet — click Generate</span
+                                >
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ═══ GENERATED PREVIEW ═══ -->
+                    <div
+                        class="card"
+                        id="generated-viewer"
+                        style="display: none"
+                    >
+                        <div class="card-head">
+                            <div class="card-label">
+                                <div
+                                    class="card-accent"
+                                    style="background: var(--purple)"
+                                ></div>
+                                Generated Preview
+                            </div>
+                            <div class="viewer-filename" id="preview-filename">
+                                <span class="dim">—</span>
+                            </div>
+                        </div>
+                        <div class="card-body no-pad" id="preview-content">
+                            <div class="placeholder" style="min-height: 200px">
+                                <span
+                                    >Generate an indicator to preview
+                                    output</span
+                                >
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <script>
+            /* ===================================================================
+               Pine Script Generator — vanilla JS controller
+               =================================================================== */
+
+            const API = {
+                modules: "/api/pine/modules",
+                module: "/api/pine/module/",
+                params: "/api/pine/params",
+                generate: "/api/pine/generate",
+                output: "/api/pine/output",
+                download: "/api/pine/download/",
+                stats: "/api/pine/stats",
+            };
+
+            let activeModule = null;
+            let originalParams = "";
+            let latestFilename = null;
+
+            /* -------------------------------------------------------------------
+               Init
+               ------------------------------------------------------------------- */
+            document.addEventListener("DOMContentLoaded", () => {
+                loadModules();
+                loadParams();
+                loadOutputFiles();
+                loadStats();
+            });
+
+            /* -------------------------------------------------------------------
+               Modules
+               ------------------------------------------------------------------- */
+            async function loadModules() {
+                try {
+                    const r = await fetch(API.modules);
+                    const d = await r.json();
+                    const list = document.getElementById("module-list");
+                    const countEl = document.getElementById("module-count");
+                    countEl.textContent = d.count || 0;
+
+                    if (!d.modules || d.modules.length === 0) {
+                        list.innerHTML =
+                            '<div class="placeholder" style="padding:30px 0;"><span>No .pine modules found</span></div>';
+                        return;
+                    }
+
+                    let html = "";
+                    for (const m of d.modules) {
+                        const icon = getModuleIcon(m.name);
+                        html += `<div class="mod-item" data-name="${m.name}" onclick="selectModule('${m.name}', this)">
+                            <span><span class="mod-icon">${icon}</span><span class="mod-name">${m.name}</span></span>
+                            <span class="mod-meta">${m.size_kb || "?"} KB</span>
+                        </div>`;
+                    }
+                    list.innerHTML = html;
+                } catch (e) {
+                    document.getElementById("module-list").innerHTML =
+                        '<div class="placeholder" style="padding:30px 0;color:var(--red)"><span>Failed to load modules</span></div>';
+                }
+            }
+
+            function getModuleIcon(name) {
+                const icons = {
+                    header: "📋",
+                    inputs: "🎛",
+                    core_calc: "⚙",
+                    top_g: "📊",
+                    wave: "🌊",
+                    regime: "🏛",
+                    vol: "📈",
+                    session: "🕐",
+                    quality: "✅",
+                    signal: "📡",
+                    trade: "💹",
+                    viz: "🎨",
+                    labels: "🏷",
+                    info_tbl: "📑",
+                    alerts: "🔔",
+                    footer: "📎",
+                };
+                for (const [key, icon] of Object.entries(icons)) {
+                    if (name.toLowerCase().includes(key)) return icon;
+                }
+                return "📄";
+            }
+
+            async function selectModule(name, el) {
+                // Mark active
+                document
+                    .querySelectorAll(".mod-item")
+                    .forEach((e) => e.classList.remove("active"));
+                if (el) el.classList.add("active");
+                activeModule = name;
+
+                // Update filename display
+                document.getElementById("viewer-filename").innerHTML =
+                    `<span>${name}</span><span class="dim">loading…</span>`;
+
+                // Show loading state
+                document.getElementById("module-content").innerHTML =
+                    '<div class="placeholder" style="min-height:300px;"><div class="spinner"></div><span>Loading module…</span></div>';
+
+                try {
+                    const r = await fetch(
+                        API.module + encodeURIComponent(name),
+                    );
+                    const d = await r.json();
+
+                    document.getElementById("viewer-filename").innerHTML =
+                        `<span>${d.name}</span><span class="dim">${d.lines} lines · ${d.size_kb} KB</span>`;
+
+                    const codeHtml = renderPineCode(d.content);
+                    const lineNums = generateLineNums(d.lines);
+                    document.getElementById("module-content").innerHTML =
+                        `<pre class="pine-code"><div class="code-wrapper"><div class="line-nums">${lineNums}</div><div class="code-content">${codeHtml}</div></div></pre>`;
+                } catch (e) {
+                    document.getElementById("module-content").innerHTML =
+                        '<div class="placeholder" style="min-height:300px;color:var(--red)"><span>Failed to load module</span></div>';
+                }
+            }
+
+            function generateLineNums(count) {
+                let s = "";
+                for (let i = 1; i <= count; i++) {
+                    s += i + "\n";
+                }
+                return s;
+            }
+
+            /* -------------------------------------------------------------------
+               Pine Script syntax highlighting (lightweight)
+               ------------------------------------------------------------------- */
+            function renderPineCode(src) {
+                // Escape HTML first
+                let code = src
+                    .replace(/&/g, "&amp;")
+                    .replace(/</g, "&lt;")
+                    .replace(/>/g, "&gt;");
+
+                // Comments (// to end of line) — process first so internals aren't re-highlighted
+                code = code.replace(/(\/\/.*)/g, '<span class="cmt">$1</span>');
+
+                // Strings
+                code = code.replace(
+                    /("(?:[^"\\]|\\.)*")/g,
+                    '<span class="str">$1</span>',
+                );
+                code = code.replace(
+                    /('(?:[^'\\]|\\.)*')/g,
+                    '<span class="str">$1</span>',
+                );
+
+                // Numbers (standalone)
+                code = code.replace(
+                    /\b(\d+\.?\d*)\b/g,
+                    '<span class="num">$1</span>',
+                );
+
+                // Pine Script keywords
+                const kws = [
+                    "indicator",
+                    "strategy",
+                    "library",
+                    "import",
+                    "export",
+                    "if",
+                    "else",
+                    "for",
+                    "while",
+                    "switch",
+                    "break",
+                    "continue",
+                    "return",
+                    "var",
+                    "varip",
+                    "int",
+                    "float",
+                    "bool",
+                    "string",
+                    "color",
+                    "label",
+                    "line",
+                    "box",
+                    "table",
+                    "array",
+                    "matrix",
+                    "map",
+                    "series",
+                    "simple",
+                    "input",
+                    "const",
+                    "true",
+                    "false",
+                    "na",
+                    "and",
+                    "or",
+                    "not",
+                    "math",
+                    "ta",
+                    "str",
+                    "request",
+                    "timeframe",
+                    "syminfo",
+                    "plot",
+                    "plotshape",
+                    "plotchar",
+                    "plotarrow",
+                    "plotcandle",
+                    "plotbar",
+                    "bgcolor",
+                    "barcolor",
+                    "fill",
+                    "hline",
+                    "alert",
+                    "alertcondition",
+                    "input\\.int",
+                    "input\\.float",
+                    "input\\.bool",
+                    "input\\.string",
+                    "input\\.source",
+                    "input\\.color",
+                    "input\\.timeframe",
+                    "input\\.session",
+                ];
+                const kwPat = new RegExp(
+                    "\\b(" + kws.join("|").replace(/\./g, "\\.") + ")\\b",
+                    "g",
+                );
+                code = code.replace(kwPat, '<span class="kw">$1</span>');
+
+                // Built-in functions (common Pine ones)
+                const fns = [
+                    "nz",
+                    "fixnan",
+                    "math\\.abs",
+                    "math\\.max",
+                    "math\\.min",
+                    "math\\.round",
+                    "math\\.sqrt",
+                    "math\\.log",
+                    "math\\.pow",
+                    "ta\\.sma",
+                    "ta\\.ema",
+                    "ta\\.rsi",
+                    "ta\\.macd",
+                    "ta\\.atr",
+                    "ta\\.highest",
+                    "ta\\.lowest",
+                    "ta\\.crossover",
+                    "ta\\.crossunder",
+                    "ta\\.change",
+                    "ta\\.cum",
+                    "ta\\.stdev",
+                    "ta\\.vwma",
+                    "ta\\.wma",
+                    "ta\\.tr",
+                    "ta\\.bb",
+                    "ta\\.cci",
+                    "ta\\.mfi",
+                    "str\\.tostring",
+                    "str\\.format",
+                    "request\\.security",
+                    "request\\.security_lower_tf",
+                    "color\\.new",
+                    "color\\.rgb",
+                    "array\\.new_float",
+                    "array\\.new_int",
+                    "array\\.push",
+                    "array\\.get",
+                    "array\\.set",
+                    "array\\.size",
+                    "array\\.avg",
+                    "table\\.new",
+                    "table\\.cell",
+                    "table\\.set_bgcolor",
+                    "label\\.new",
+                    "label\\.set_text",
+                    "label\\.delete",
+                    "line\\.new",
+                    "line\\.delete",
+                    "bar_index",
+                    "close",
+                    "open",
+                    "high",
+                    "low",
+                    "volume",
+                    "time",
+                    "timenow",
+                ];
+                const fnPat = new RegExp(
+                    "\\b(" + fns.join("|").replace(/\./g, "\\.") + ")\\b",
+                    "g",
+                );
+                code = code.replace(fnPat, '<span class="fn">$1</span>');
+
+                return code;
+            }
+
+            /* -------------------------------------------------------------------
+               Params
+               ------------------------------------------------------------------- */
+            async function loadParams() {
+                try {
+                    const r = await fetch(API.params);
+                    const d = await r.json();
+                    const raw = d.raw || "";
+                    document.getElementById("params-editor").value = raw;
+                    originalParams = raw;
+                } catch (e) {
+                    document.getElementById("params-editor").value =
+                        "# Failed to load params.yaml";
+                }
+            }
+
+            async function saveParams() {
+                const raw = document.getElementById("params-editor").value;
+                try {
+                    const r = await fetch(API.params, {
+                        method: "PUT",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ raw: raw }),
+                    });
+                    const d = await r.json();
+                    if (d.ok) {
+                        originalParams = raw;
+                        showToast("params.yaml saved ✓", "ok");
+                    } else {
+                        showToast(d.detail || "Save failed", "err");
+                    }
+                } catch (e) {
+                    showToast("Network error saving params", "err");
+                }
+            }
+
+            function resetParams() {
+                document.getElementById("params-editor").value = originalParams;
+                showToast("Params reset to last saved state", "ok");
+            }
+
+            /* -------------------------------------------------------------------
+               Generate
+               ------------------------------------------------------------------- */
+            async function doGenerate() {
+                const btn = document.getElementById("generate-btn");
+                const result = document.getElementById("gen-result");
+
+                btn.disabled = true;
+                btn.innerHTML =
+                    '<span class="spinner" style="width:12px;height:12px;border-width:2px;"></span> Generating…';
+                result.innerHTML =
+                    '<span style="color:var(--text-muted);font-size:11px;">Working…</span>';
+
+                try {
+                    const r = await fetch(API.generate, { method: "POST" });
+                    const d = await r.json();
+
+                    if (d.ok) {
+                        result.innerHTML = `<div class="gen-ok">✓ Generated <strong>${d.filename}</strong> — ${d.lines} lines, ${d.size_kb} KB</div>`;
+                        showToast(`Generated ${d.filename} ✓`, "ok");
+                        latestFilename = d.filename;
+                        loadOutputFiles();
+                        loadStats();
+                        loadGeneratedPreview(d.filename);
+                    } else {
+                        result.innerHTML = `<div class="gen-err">✗ ${d.detail || "Generation failed"}</div>`;
+                        showToast("Generation failed", "err");
+                    }
+                } catch (e) {
+                    result.innerHTML =
+                        '<div class="gen-err">✗ Network error</div>';
+                    showToast("Network error", "err");
+                } finally {
+                    btn.disabled = false;
+                    btn.innerHTML = "▶ Generate";
+                }
+            }
+
+            /* -------------------------------------------------------------------
+               Download latest
+               ------------------------------------------------------------------- */
+            function downloadLatest() {
+                if (latestFilename) {
+                    window.location.href =
+                        API.download + encodeURIComponent(latestFilename);
+                } else {
+                    showToast("No generated file yet — generate first", "err");
+                }
+            }
+
+            /* -------------------------------------------------------------------
+               Generated preview
+               ------------------------------------------------------------------- */
+            async function loadGeneratedPreview(filename) {
+                const viewer = document.getElementById("generated-viewer");
+                viewer.style.display = "block";
+
+                document.getElementById("preview-filename").innerHTML =
+                    `<span>📦 ${filename}</span><span class="dim">loading…</span>`;
+
+                document.getElementById("preview-content").innerHTML =
+                    '<div class="placeholder" style="min-height:200px;"><div class="spinner"></div><span>Loading preview…</span></div>';
+
+                try {
+                    const r = await fetch(
+                        API.download + encodeURIComponent(filename),
+                    );
+                    const text = await r.text();
+                    const lines = text.split("\n").length;
+
+                    document.getElementById("preview-filename").innerHTML =
+                        `<span>📦 ${filename}</span><span class="dim">${lines} lines (generated)</span>`;
+
+                    const codeHtml = renderPineCode(text);
+                    const lineNums = generateLineNums(lines);
+                    document.getElementById("preview-content").innerHTML =
+                        `<pre class="pine-code"><div class="code-wrapper"><div class="line-nums">${lineNums}</div><div class="code-content">${codeHtml}</div></div></pre>`;
+
+                    // Scroll to preview
+                    viewer.scrollIntoView({
+                        behavior: "smooth",
+                        block: "start",
+                    });
+                } catch (e) {
+                    document.getElementById("preview-content").innerHTML =
+                        '<div class="placeholder" style="min-height:200px;color:var(--red)"><span>Failed to load output</span></div>';
+                }
+            }
+
+            /* -------------------------------------------------------------------
+               Output files
+               ------------------------------------------------------------------- */
+            async function loadOutputFiles() {
+                try {
+                    const r = await fetch(API.output);
+                    const d = await r.json();
+
+                    // Update download strip in sidebar
+                    const strip = document.getElementById("download-strip");
+                    if (d.files && d.files.length > 0) {
+                        const latest = d.files[d.files.length - 1];
+                        latestFilename = latest.name;
+                        strip.innerHTML = `
+                            <a href="${API.download}${encodeURIComponent(latest.name)}" download>
+                                ⬇ ${latest.name}
+                            </a>
+                            <div class="download-info">${latest.size_kb} KB · ${latest.modified ? new Date(latest.modified).toLocaleString() : "—"}</div>
+                        `;
+                    } else {
+                        strip.innerHTML =
+                            '<div style="font-size:10px;color:var(--text-muted)">No output files yet</div>';
+                    }
+
+                    // Update files list in main content
+                    const list = document.getElementById("output-list");
+                    if (!d.files || d.files.length === 0) {
+                        list.innerHTML =
+                            '<div class="placeholder" style="padding:20px 0;"><span>No output files yet — click Generate</span></div>';
+                        return;
+                    }
+
+                    let html = "";
+                    for (const f of d.files) {
+                        const modified = f.modified
+                            ? new Date(f.modified).toLocaleDateString()
+                            : "—";
+                        html += `<div class="output-file-row">
+                            <div>
+                                <div class="output-file-name">📄 ${f.name}</div>
+                                <div class="output-file-meta">${f.size_kb} KB · ${modified}</div>
+                            </div>
+                            <div class="output-file-actions">
+                                <button class="btn btn-sm" onclick="loadGeneratedPreview('${f.name}')">👁 Preview</button>
+                                <a class="btn btn-sm" href="${API.download}${encodeURIComponent(f.name)}" download>⬇ Download</a>
+                            </div>
+                        </div>`;
+                    }
+                    list.innerHTML = html;
+                } catch (e) {
+                    document.getElementById("output-list").innerHTML =
+                        '<div class="placeholder" style="padding:20px 0;color:var(--red)"><span>Failed to load output files</span></div>';
+                }
+            }
+
+            /* -------------------------------------------------------------------
+               Stats
+               ------------------------------------------------------------------- */
+            async function loadStats() {
+                try {
+                    const r = await fetch(API.stats);
+                    const d = await r.json();
+
+                    document.getElementById("stat-modules").textContent =
+                        d.module_count || 0;
+                    document.getElementById("stat-lines").textContent = (
+                        d.total_lines || 0
+                    ).toLocaleString();
+
+                    // Compute size string
+                    const chars = d.total_chars || 0;
+                    const kb =
+                        chars > 0 ? (chars / 1024).toFixed(1) + " KB" : "—";
+                    document.getElementById("stat-size").textContent =
+                        d.output_size_kb ? d.output_size_kb + " KB" : kb;
+                    document.getElementById("stat-type").textContent = (
+                        d.indicator_type || "—"
+                    ).toUpperCase();
+
+                    // Also update module count badge
+                    const countEl = document.getElementById("module-count");
+                    if (d.module_count) {
+                        countEl.textContent = d.module_count;
+                    }
+                } catch (e) {
+                    // Stats failed to load — leave defaults
+                }
+            }
+
+            /* -------------------------------------------------------------------
+               Toast notifications
+               ------------------------------------------------------------------- */
+            function showToast(msg, type) {
+                const el = document.createElement("div");
+                el.className = "toast toast-" + (type || "ok");
+                el.textContent = msg;
+                document.body.appendChild(el);
+                setTimeout(() => {
+                    el.style.opacity = "0";
+                }, 2500);
+                setTimeout(() => {
+                    el.remove();
+                }, 3000);
+            }
+
+            /* -------------------------------------------------------------------
+               Timestamp for HTMX polling
+               ------------------------------------------------------------------- */
+            function updateTimestamp() {
+                const el = document.getElementById("last-poll");
+                if (el) {
+                    const now = new Date();
+                    el.textContent = "Last poll: " + now.toLocaleTimeString();
+                }
+            }
+
+            /* -------------------------------------------------------------------
+               Keyboard shortcuts
+               ------------------------------------------------------------------- */
+            document.addEventListener("keydown", (e) => {
+                // Ctrl+S in params editor -> save
+                if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+                    if (
+                        document.activeElement ===
+                        document.getElementById("params-editor")
+                    ) {
+                        e.preventDefault();
+                        saveParams();
+                    }
+                }
+                // Ctrl+Enter -> generate
+                if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+                    e.preventDefault();
+                    doGenerate();
+                }
+            });
+        </script>
+    </body>
+</html>
