@@ -46,7 +46,7 @@ err()  { echo -e "${RED}[fail]${NC} $*"; }
 
 # Generate a cryptographically random string (URL-safe base64, no padding)
 gen_secret() {
-    python3 -c "import secrets; print(secrets.token_urlsafe(${1:-32}))"
+    python3.13 -c "import secrets; print(secrets.token_urlsafe(${1:-32}))"
 }
 
 usage() {
@@ -79,7 +79,7 @@ usage() {
 ensure_venv() {
     if [ ! -d "$VENV_DIR" ]; then
         log "Creating virtual environment in ${VENV_DIR} ..."
-        python3 -m venv "$VENV_DIR"
+        python3.13 -m venv "$VENV_DIR"
         ok "Virtual environment created"
     fi
 

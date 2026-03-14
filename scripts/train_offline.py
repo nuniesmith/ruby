@@ -14,7 +14,6 @@ Usage:
 from __future__ import annotations
 
 import argparse
-
 import os
 import sys
 import time
@@ -203,7 +202,7 @@ def check_data_availability(
     result: dict[str, dict] = {}
 
     for sym in symbols:
-        entry: dict = {
+        sym_entry: dict = {
             "bar_count": 0,
             "status": "unknown",
             "last_synced": None,
@@ -214,35 +213,35 @@ def check_data_availability(
         # Check sync metadata first
         meta = sync_meta.get(sym, {})
         if meta:
-            entry["bar_count"] = meta.get("bar_count", 0)
-            entry["status"] = meta.get("status", "unknown")
-            entry["last_synced"] = meta.get("last_synced")
+            sym_entry["bar_count"] = meta.get("bar_count", 0)
+            sym_entry["status"] = meta.get("status", "unknown")
+            sym_entry["last_synced"] = meta.get("last_synced")
 
         # If we didn't get bar counts from sync status, probe the bars endpoint
-        if entry["bar_count"] == 0:
+        if sym_entry["bar_count"] == 0:
             probe_url = f"{data_url}/api/data/bars?symbol={sym}&interval=1m&days={days}"
             probe_code, probe_body = _http_get(probe_url, timeout=30)
             if probe_code == 200 and probe_body:
-                entry["bar_count"] = probe_body.get("count", 0)
-                entry["status"] = "available" if entry["bar_count"] > 0 else "empty"
+                sym_entry["bar_count"] = probe_body.get("count", 0)
+                sym_entry["status"] = "available" if sym_entry["bar_count"] > 0 else "empty"
 
         # Determine action
-        bc = entry["bar_count"]
+        bc = sym_entry["bar_count"]
         if bc < MIN_BARS_SKIP:
-            entry["skip"] = True
+            sym_entry["skip"] = True
             action = f"{RED}SKIP{RESET}"
         elif bc < MIN_BARS_WARN:
-            entry["warn"] = True
+            sym_entry["warn"] = True
             action = f"{YELLOW}WARN{RESET}"
         else:
             action = f"{GREEN}OK{RESET}"
 
-        last_sync_str = entry["last_synced"] or "—"
+        last_sync_str = sym_entry["last_synced"] or "—"
         if len(last_sync_str) > 20:
             last_sync_str = last_sync_str[:19]
 
-        print(f"  {sym:<22} {bc:>10,} {entry['status']:<12} {last_sync_str:<22} {action}")
-        result[sym] = entry
+        print(f"  {sym:<22} {bc:>10,} {sym_entry['status']:<12} {last_sync_str:<22} {action}")
+        result[sym] = sym_entry
 
     print()
 

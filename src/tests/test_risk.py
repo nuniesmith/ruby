@@ -74,7 +74,7 @@ class TestRiskManagerInit:
         rm = _make_rm()
         assert rm.account_size == 50_000
         assert rm.max_risk_per_trade == 50_000 * 0.0075  # $375
-        assert rm.max_daily_loss == -1500.0  # updated default for 150k
+        assert rm.max_daily_loss == -3300.0  # TPT $150K daily loss limit
         assert rm.max_open_trades == 2
 
     def test_custom_params(self):

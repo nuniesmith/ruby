@@ -445,25 +445,31 @@ async def analyze_assets(body: AnalyzeRequest, request: Request) -> dict:
                 result["errors"].append(f"news: {exc}")
                 logger.debug("News sentiment failed for %s: %s", symbol, exc)
 
-        # Step 4: CNN prediction
+        # Step 4: CNN prediction — read the latest cnn_prob/cnn_confidence that
+        # the engine embedded in its ruby signal when it last ran inference.
+        # Live CNN inference is not possible here because it requires a rendered
+        # chart snapshot with ORB context (orb_high/orb_low/direction) that the
+        # pretrade endpoint does not have.
         cnn_conf: float | None = None
-        if body.run_cnn:
+        if body.run_cnn and redis:
             try:
-                from lib.services.training.trainer_server import predict_single
+                from lib.services.data.api.ruby import _RUBY_SIGNAL_KEY_PREFIX
 
-                prediction = predict_single(symbol)
-                if prediction and isinstance(prediction, dict):
-                    result["cnn_signal"] = prediction.get("signal", "NEUTRAL")
-                    conf = _safe_float(prediction.get("confidence", 0.0))
-                    result["cnn_confidence"] = round(conf, 4)
-                    # Normalize confidence to 0-100 (already is if 0-1, scale up)
-                    cnn_conf = conf * 100.0 if conf <= 1.0 else conf
-                    cnn_conf = max(0.0, min(100.0, cnn_conf))
-            except ImportError:
-                result["errors"].append("cnn: trainer module not available")
+                raw_sig = redis.get(f"{_RUBY_SIGNAL_KEY_PREFIX}{symbol}")
+                if raw_sig:
+                    sig_data = json.loads(raw_sig.decode() if isinstance(raw_sig, bytes) else raw_sig)
+                    cnn_prob = sig_data.get("cnn_prob")
+                    cnn_confidence = sig_data.get("cnn_confidence", "")
+                    if cnn_prob is not None:
+                        result["cnn_signal"] = "BULL" if cnn_prob >= 0.5 else "BEAR"
+                        result["cnn_confidence"] = round(float(cnn_prob), 4)
+                        cnn_conf = float(cnn_prob) * 100.0
+                        cnn_conf = max(0.0, min(100.0, cnn_conf))
+                        if cnn_confidence:
+                            result["cnn_confidence_label"] = cnn_confidence
             except Exception as exc:
                 result["errors"].append(f"cnn: {exc}")
-                logger.debug("CNN prediction failed for %s: %s", symbol, exc)
+                logger.debug("CNN signal lookup failed for %s: %s", symbol, exc)
 
         # Step 5: Ruby signal (if requested)
         if body.run_ruby:

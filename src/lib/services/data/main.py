@@ -168,6 +168,8 @@ from lib.services.data.api.settings import (  # noqa: E402
 )
 from lib.services.data.api.simulation_api import (  # noqa: E402
     router as sim_router,
+)
+from lib.services.data.api.simulation_api import (  # noqa: E402
     sse_router as sim_sse_router,
 )
 from lib.services.data.api.sse import router as sse_router  # noqa: E402
