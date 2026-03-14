@@ -429,7 +429,7 @@ jobs:
     #   PROD_SSH_PORT      (fallback: PROD_SSH_PORT → '22')
     # =========================================================================
     deploy:
-        name: "🦌 Deploy ALL to Oryx"
+        name: "🦌 Deploy to Prod"
         needs: [docker, docker-base]
         runs-on: ubuntu-latest
         timeout-minutes: 20
@@ -731,7 +731,7 @@ jobs:
               if: always() && steps.deploy.outcome == 'success'
               uses: nuniesmith/actions/.github/actions/health-check@main
               with:
-                  containers: ruby
+                  containers: ruby-web-1 ruby-data-1 ruby-engine-1 ruby-trainer-1
                   ssh-host: ${{ steps.oryx.outputs.ip }}
                   ssh-port: ${{ steps.oryx.outputs.port }}
                   ssh-user: ${{ steps.oryx.outputs.user }}
@@ -783,7 +783,7 @@ jobs:
                   echo "| 🧪 Test | \`${{ needs.test.result }}\` |" >> $GITHUB_STEP_SUMMARY
                   echo "| 🐳 Build :base (shared deps) | \`${{ needs.docker-base.result }}\` |" >> $GITHUB_STEP_SUMMARY
                   echo "| 🐳 Docker Build & Push | \`${{ needs.docker.result }}\` |" >> $GITHUB_STEP_SUMMARY
-                  echo "| 🦌 Deploy ALL to Oryx | \`${{ needs.deploy.result }}\` |" >> $GITHUB_STEP_SUMMARY
+                  echo "| 🦌 Deploy to Prod | \`${{ needs.deploy.result }}\` |" >> $GITHUB_STEP_SUMMARY
                   echo "" >> $GITHUB_STEP_SUMMARY
 
                   if [ "${{ needs.lint.result }}" = "success" ] && \
