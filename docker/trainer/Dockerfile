@@ -114,7 +114,7 @@ EXPOSE 8200
 # ---------------------------------------------------------------------------
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD python -c \
-        "import urllib.request; urllib.request.urlopen('http://localhost:8200/health')" \
+        "import urllib.request; urllib.request.urlopen('http://trainer:8200/health')" \
     || exit 1
 
 # Default: run the persistent HTTP training server.

@@ -592,7 +592,7 @@ jobs:
                       # In docker-compose.yml the trainer uses http://data:8000 via
                       # Docker networking, but we also set these for any scripts that
                       # run outside Docker on the host.
-                      upsert_env "TRAINER_SERVICE_URL"   "http://localhost:8200"
+                      upsert_env "TRAINER_SERVICE_URL"   "http://trainer:8200"
                       upsert_env "ENGINE_DATA_URL"       "http://data:8000"
 
                       # Discord notifications

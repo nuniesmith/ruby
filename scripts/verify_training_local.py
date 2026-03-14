@@ -992,7 +992,7 @@ def check_trainer_server() -> bool:
     """If a trainer server is already running, verify it is healthy and idle."""
     _section("CHECK 7 — Trainer server health (if running)")
 
-    trainer_url = os.getenv("TRAINER_URL", "http://localhost:8200").rstrip("/")
+    trainer_url = os.getenv("TRAINER_URL", "http://trainer:8200").rstrip("/")
     _info(f"TRAINER_URL = {trainer_url}")
 
     try:
@@ -1167,7 +1167,7 @@ def main() -> None:
     print(f"  ENGINE_DATA_URL = {os.environ.get('ENGINE_DATA_URL', '(not set)')}")
     print(f"  DATABASE_URL    = {os.environ.get('DATABASE_URL', '(not set — will use SQLite fallback)')}")
     print(f"  REDIS_URL       = {os.environ.get('REDIS_URL', '(not set)')}")
-    print(f"  TRAINER_URL     = {os.environ.get('TRAINER_URL', 'http://localhost:8200')}")
+    print(f"  TRAINER_URL     = {os.environ.get('TRAINER_URL', 'http://trainer:8200')}")
 
     # Run all checks in order
     check_historical_bars_table(auto_fix=args.fix_table)

@@ -119,11 +119,16 @@ def cache_get(key: str) -> bytes | None:
 
 def cache_set(key: str, data: bytes, ttl: int) -> None:
     if REDIS_AVAILABLE and _r is not None:
-        _r.setex(key, ttl, data)
+        if ttl == 0:
+            # ttl=0 means "persist forever" — use SET without EX.
+            # setex(key, 0, ...) would be a Redis error / immediate expiry.
+            _r.set(key, data)
+        else:
+            _r.setex(key, ttl, data)
     else:
         _mem_cache[key] = {
             "data": data,
-            "expires": datetime.now(tz=UTC).timestamp() + ttl,
+            "expires": float("inf") if ttl == 0 else datetime.now(tz=UTC).timestamp() + ttl,
         }
 
 

@@ -184,8 +184,8 @@ Rithmic (async_rithmic)  →  Main account order + 1:1 copy to all slave account
 **Retrain execution plan (run from oryx):**
 1. `python scripts/fix_dataset_paths.py` — ✅ DONE
 2. `python scripts/validate_dataset.py` — ✅ DONE (28,548 valid)
-3. `python scripts/run_full_retrain.py --trainer-url http://localhost:8200` — TODO: runs steps 3–8
-4. `python scripts/run_per_group_training.py --trainer-url http://localhost:8200` — TODO: compare groups
+3. `python scripts/run_full_retrain.py --trainer-url http://trainer:8200` — TODO: runs steps 3–8
+4. `python scripts/run_per_group_training.py --trainer-url http://trainer:8200` — TODO: compare groups
 
 **Files**: `src/lib/analysis/ml/breakout_cnn.py`, `src/lib/services/training/trainer_server.py`, `src/lib/services/training/dataset_generator.py`
 **New scripts**: `scripts/fix_dataset_paths.py`, `scripts/validate_dataset.py`, `scripts/test_training_local.py`, `scripts/run_full_retrain.py`, `scripts/run_per_group_training.py`

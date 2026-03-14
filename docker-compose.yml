@@ -462,7 +462,7 @@ services:
                     "CMD",
                     "python",
                     "-c",
-                    "import urllib.request; urllib.request.urlopen('http://localhost:8200/health')",
+                    "import urllib.request; urllib.request.urlopen('http://trainer:8200/health')",
                 ]
             interval: 30s
             timeout: 10s

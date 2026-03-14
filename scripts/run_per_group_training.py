@@ -82,7 +82,7 @@ ALL_SYMBOLS: list[str] = sorted({s for symbols in ASSET_GROUPS.values() for s in
 # ---------------------------------------------------------------------------
 # Defaults
 # ---------------------------------------------------------------------------
-DEFAULT_TRAINER_URL = "http://localhost:8200"
+DEFAULT_TRAINER_URL = "http://trainer:8200"
 DEFAULT_DAYS_BACK = 365
 DEFAULT_EPOCHS = 80
 DEFAULT_BATCH_SIZE = 32

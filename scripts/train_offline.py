@@ -388,7 +388,7 @@ def trigger_training(data_url: str, trainer_url: str | None = None) -> bool:
     _section("Training")
 
     # Try the trainer URL (typically port 8200)
-    url = trainer_url or os.getenv("TRAINER_URL", "http://localhost:8200")
+    url = trainer_url or os.getenv("TRAINER_URL", "http://trainer:8200")
 
     _info(f"Trainer URL: {url}")
 
@@ -506,7 +506,7 @@ Examples:
     parser.add_argument(
         "--trainer-url",
         default=None,
-        help="Trainer service URL (default: http://localhost:8200). Only used with --train.",
+        help="Trainer service URL (default: http://trainer:8200). Only used with --train.",
     )
     return parser.parse_args(argv)
 
