@@ -415,6 +415,13 @@ services:
             - KRAKEN_API_SECRET=${KRAKEN_API_SECRET:-}
 
             # ----------------------------------------------------------------
+            # Inter-service authentication — sent as X-API-Key on all
+            # outbound requests to the data service (/bars/*, /fill/*, etc.).
+            # Must match the API_KEY set on the data/web/engine containers.
+            # ----------------------------------------------------------------
+            - API_KEY=${API_KEY:-}
+
+            # ----------------------------------------------------------------
             # Dataset generation defaults
             # Kraken spot crypto symbols (BTC/ETH/SOL/etc.) are included by
             # default alongside CME futures. They are resolved via the
@@ -423,7 +430,13 @@ services:
             # ----------------------------------------------------------------
             - CNN_RETRAIN_SYMBOLS=${CNN_RETRAIN_SYMBOLS:-MGC,SIL,MES,MNQ,M2K,MYM,ZN,ZB,ZW}
             - CNN_RETRAIN_DAYS_BACK=${CNN_RETRAIN_DAYS_BACK:-180}
-            - CNN_RETRAIN_BARS_SOURCE=${CNN_RETRAIN_BARS_SOURCE:-massive}
+            # "engine" routes all bar requests through the data service
+            # (http://data:8000), which handles Redis/Postgres caching and
+            # Massive/Kraken API calls.  This is the correct mode when the
+            # trainer and data service are in the same Docker network.
+            # Use "massive" only when running the trainer standalone without
+            # the data service (e.g. the old GPU-rig-only setup).
+            - CNN_RETRAIN_BARS_SOURCE=${CNN_RETRAIN_BARS_SOURCE:-engine}
             - CNN_RETRAIN_ORB_SESSION=${CNN_RETRAIN_ORB_SESSION:-all}
             - CNN_ORB_SESSION=${CNN_ORB_SESSION:-all}
 
