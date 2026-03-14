@@ -158,7 +158,7 @@ services:
             - KRAKEN_API_SECRET=${KRAKEN_API_SECRET:-}
             - ENABLE_KRAKEN_CRYPTO=${ENABLE_KRAKEN_CRYPTO:-1}
             - TRAINER_API_KEY=${TRAINER_API_KEY:-}
-            - TRAINER_SERVICE_URL=${TRAINER_SERVICE_URL:-http://100.113.72.63:8200}
+            - TRAINER_SERVICE_URL=${TRAINER_SERVICE_URL:-http://trainer:8200}
             - GITHUB_SIGNALS_REPO=${GITHUB_SIGNALS_REPO:-nuniesmith/ruby-signals}
             - LOG_LEVEL=info
             - PYTHONPATH=/app/src
@@ -222,7 +222,7 @@ services:
             - KRAKEN_API_SECRET=${KRAKEN_API_SECRET:-}
             - ENABLE_KRAKEN_CRYPTO=${ENABLE_KRAKEN_CRYPTO:-0}
             - TRAINER_API_KEY=${TRAINER_API_KEY:-}
-            - TRAINER_SERVICE_URL=${TRAINER_SERVICE_URL:-http://100.113.72.63:8200}
+            - TRAINER_SERVICE_URL=${TRAINER_SERVICE_URL:-http://trainer:8200}
             - GITHUB_SIGNALS_REPO=${GITHUB_SIGNALS_REPO:-nuniesmith/ruby-signals}
             - LOG_LEVEL=info
             - PYTHONPATH=/app/src
@@ -264,7 +264,7 @@ services:
         environment:
             - DATA_SERVICE_URL=http://data:8000
             - CHARTING_SERVICE_URL=http://charting:8003
-            - TRAINER_SERVICE_URL=${TRAINER_SERVICE_URL:-http://100.113.72.63:8200}
+            - TRAINER_SERVICE_URL=${TRAINER_SERVICE_URL:-http://trainer:8200}
             - WEB_HOST=0.0.0.0
             - WEB_PORT=8080
             - API_KEY=${API_KEY:-}

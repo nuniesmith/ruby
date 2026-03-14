@@ -2,7 +2,7 @@
 Trainer Page API Router
 ========================
 Serves the full Trainer dashboard page at GET /trainer and proxies all
-/trainer/api/* requests to the trainer service (default http://100.113.72.63:8200).
+/trainer/api/* requests to the trainer service (default http://trainer:8200).
 
 The trainer service URL is configurable at runtime and persisted in Redis
 so it survives container restarts.  This lets you point the dashboard at a
@@ -37,7 +37,7 @@ router = APIRouter(tags=["Trainer"])
 # Trainer URL — default from env, overridable via Redis at runtime
 # ---------------------------------------------------------------------------
 
-_DEFAULT_TRAINER_URL = os.getenv("TRAINER_SERVICE_URL", "http://100.113.72.63:8200").rstrip("/")
+_DEFAULT_TRAINER_URL = os.getenv("TRAINER_SERVICE_URL", "http://trainer:8200").rstrip("/")
 _TRAINER_URL_REDIS_KEY = "futures:trainer_service_url"
 
 # Shared secret for authenticating with the trainer service.
