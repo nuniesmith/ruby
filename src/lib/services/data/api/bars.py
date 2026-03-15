@@ -94,9 +94,10 @@ router = APIRouter(tags=["Bars"])
 # quickly; outside hours a 60-minute threshold avoids hammering the API.
 _AUTO_FILL_STALE_MINUTES = int(os.getenv("BARS_AUTO_FILL_STALE_MINUTES", "5"))
 
-# Maximum rows returned in a single /bars/{symbol} response.  Clients that
-# need more should page using start/end query params.
-_MAX_ROWS = int(os.getenv("BARS_MAX_ROWS", "50000"))
+# Maximum rows returned in a single /bars/{symbol} response.  Default 200K
+# covers up to 730 days of 1-minute bars (730 × ~200 bars/day ≈ 146K).
+# Override via BARS_MAX_ROWS env var if needed.
+_MAX_ROWS = int(os.getenv("BARS_MAX_ROWS", "200000"))
 
 # Thread pool for non-blocking fill-all jobs (1 worker: fills are sequential
 # per symbol anyway, and we don't want to saturate the Massive API).

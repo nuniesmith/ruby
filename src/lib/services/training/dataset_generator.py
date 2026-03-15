@@ -2718,12 +2718,13 @@ def generate_dataset(
 
         # ── Low-bar detection + retry ─────────────────────────────────
         # Flag symbols whose bar count is well below what we'd expect for
-        # `days_back` of history.  1-minute futures trade ~23 h/day on
-        # weekdays, so a conservative floor of 200 bars/day (accounts for
-        # weekends, holidays, and CME maintenance windows) gives us a
-        # threshold that catches genuinely sparse symbols without
-        # false-positives on recently-listed contracts.
-        _low_bar_threshold = days_back * 200
+        # `days_back` of history.  CME micro futures produce ~800-1000
+        # 1-minute bars per trading day (23h session minus maintenance),
+        # but calendar days include weekends + holidays.  Empirically
+        # 50K bars from Massive covers ~350-400 calendar days.  Using
+        # 120 bars/calendar-day as the floor avoids false positives when
+        # the API caps at 50K rows per request.
+        _low_bar_threshold = days_back * 120
         _low_bar_symbols: list[tuple[str, int]] = [
             (sym, cnt)
             for sym, cnt in sorted(_fetched_bar_counts.items(), key=lambda x: x[1])
@@ -2732,7 +2733,7 @@ def generate_dataset(
         if _low_bar_symbols:
             logger.warning(
                 "⚠  %d symbol(s) have fewer bars than expected for %d days "
-                "(threshold: %d bars = %d days x 200 bars/day).",
+                "(threshold: %d bars = %d days x 120 bars/day).",
                 len(_low_bar_symbols),
                 days_back,
                 _low_bar_threshold,
