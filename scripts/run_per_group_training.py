@@ -73,8 +73,7 @@ RESET = "\033[0m"
 ASSET_GROUPS: dict[str, list[str]] = {
     "metals": ["MGC", "SIL"],
     "equity_micros": ["MES", "MNQ", "M2K", "MYM"],
-    "treasuries": ["ZN", "ZB"],
-    "agriculture": ["ZW"],
+    "treasuries": ["ZN"],
 }
 
 ALL_SYMBOLS: list[str] = sorted({s for symbols in ASSET_GROUPS.values() for s in symbols})
@@ -644,8 +643,7 @@ def _parse_args() -> argparse.Namespace:
             Asset Groups:
               metals          MGC, SIL
               equity_micros   MES, MNQ, M2K, MYM
-              treasuries      ZN, ZB
-              agriculture     ZW
+              treasuries      ZN
 
             Examples:
               python scripts/run_per_group_training.py                          # all groups + combined

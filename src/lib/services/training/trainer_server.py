@@ -211,12 +211,11 @@ _FALLBACK_SYMBOLS: list[str] = [
     "MNQ",  # Micro Nasdaq-100
     "M2K",  # Micro Russell 2000
     "MYM",  # Micro Dow Jones
-    # Interest rate futures — full history available
+    # Interest rate futures
     "ZN",  # 10Y T-Note
-    "ZB",  # 30Y T-Bond
-    # Agricultural — ZW has sufficient coverage; ZC/ZS dropped (<96% coverage)
-    "ZW",  # Wheat
-    # Dropped symbols (insufficient 1-min bar history for 365-day training window):
+    # Dropped symbols (insufficient 1-min bar coverage for 365-day window):
+    # ZB   (84.2%) — 30Y T-Bond, thin overnight bars; revisit when data deepens
+    # ZW   (borderline) — Wheat, sparse overnight coverage; revisit later
     # MHG  (14.3%), MCL  (0.4%),  MNG  (0.0%),
     # 6E   (2.5%),  6B   (2.6%),  6J   (4.7%),
     # 6A   (1.7%),  6C   (1.3%),  6S   (1.1%),
@@ -229,8 +228,7 @@ _FALLBACK_SYMBOLS: list[str] = [
 ASSET_GROUPS: dict[str, list[str]] = {
     "metals": ["MGC", "SIL"],
     "equity_micros": ["MES", "MNQ", "M2K", "MYM"],
-    "treasuries": ["ZN", "ZB"],
-    "agriculture": ["ZW"],
+    "treasuries": ["ZN"],
 }
 
 

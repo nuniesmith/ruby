@@ -83,7 +83,7 @@ MAX_WAIT_TRAIN = 7200  # 2 hours max per training step
 
 DOCKER_PREFIX = "/app/"
 
-ALL_SYMBOLS = ["M2K", "MES", "MGC", "MNQ", "MYM", "SIL", "ZB", "ZN", "ZW"]
+ALL_SYMBOLS = ["M2K", "MES", "MGC", "MNQ", "MYM", "SIL", "ZN"]
 
 CSV_FILES = [
     PROJECT_ROOT / "dataset" / "labels.csv",
