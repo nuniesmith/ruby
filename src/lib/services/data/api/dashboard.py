@@ -2445,7 +2445,7 @@ def _render_grok_panel(
                 '<div class="t-text-faint text-xs" id="grok-cached-text" '
                 'style="display:flex;align-items:center;gap:5px">'
                 '<span style="font-size:11px">🔒</span>'
-                f"<span>Futures closed — AI analyst resumes at open"
+                "<span>Futures closed — AI analyst resumes at open"
                 + (f' <span style="opacity:0.6">({reopen_label})</span>' if reopen_label else "")
                 + "</span></div>"
             )

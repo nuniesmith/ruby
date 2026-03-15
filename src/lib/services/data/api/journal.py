@@ -1244,7 +1244,6 @@ def get_journal_trades_html(
             close = t.get("close_price")
             pnl = t.get("pnl")
             contracts = int(t.get("contracts") or 1)
-            tstatus = str(t.get("status", ""))
             grade = str(t.get("grade") or "")
             src = str(t.get("source") or "manual")
             created = str(t.get("created_at", ""))[:16]

@@ -885,7 +885,7 @@ def run_per_group_training(args: argparse.Namespace) -> int:
                         group = label.replace("group:", "")
                         _dim(f"  breakout_cnn_best_{group}.pt")
                     elif tier == "3":
-                        _dim(f"  breakout_cnn_best.pt  (master/champion)")
+                        _dim("  breakout_cnn_best.pt  (master/champion)")
             print()
             _info("Inference resolution order:")
             _dim("  1. Per-asset:  breakout_cnn_best_{SYMBOL}.pt")
