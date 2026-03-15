@@ -37,7 +37,7 @@ Rithmic (async_rithmic)  →  Main account order + 1:1 copy to all slave account
 
 **EOD Safety (live now):** Rithmic EOD cancel-all + exit-position fires at 16:00 ET daily via the engine scheduler. 15:45 warning alert fires first. Manual trigger: `POST /api/rithmic/eod-close`. See [`docs/architecture.md`](docs/architecture.md) for full sequence.
 
-**Training assets (focused):** `MGC SIL MES MNQ M2K MYM ZN ZB ZW` — generate signals only for these. Other forex/low-liquidity assets tracked for broad view only (no signal generation until further notice).
+**Training assets (focused):** `MGC SIL MES MNQ M2K MYM ZN` — generate signals only for these. Other forex/low-liquidity assets tracked for broad view only (no signal generation until further notice).
 
 ---
 
@@ -611,7 +611,7 @@ Rithmic (async_rithmic)  →  Main account order + 1:1 copy to all slave account
 > Build and maintain a rolling window of ~1 year of 1-minute data for all enabled assets.
 > Data service keeps this in sync. Engine and trainer pull from Postgres (or Redis cache).
 >
-> **Assets**: 9 futures (MGC SIL MES MNQ M2K MYM ZN ZB ZW) + 3 crypto (BTC/USD ETH/USD SOL/USD)
+> **Assets**: 9 futures (MGC SIL MES MNQ M2K MYM ZN) + 3 crypto (BTC/USD ETH/USD SOL/USD)
 >
 > **Built 2026-03-15:** `DataSyncService` created with background sync, retention, Redis cache.
 > Uses existing `historical_bars` table + `backfill_symbol()` from backfill.py — no new table needed.
