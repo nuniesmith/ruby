@@ -2,24 +2,31 @@
 Journal API router — daily P&L journal endpoints.
 
 Endpoints:
-    GET /journal/html         — HTMX-swappable fragment (used by the dashboard panel)
-    GET /journal/page         — Standalone full-page view with dark theme + nav bar
-    GET /journal/entries      — JSON list of recent journal entries
-    GET /journal/stats        — JSON aggregated statistics
-    GET /journal/today        — JSON today's entry (if it exists)
-    GET /journal/tags         — JSON all unique tags with usage counts
-    POST /journal/save        — Save / upsert a daily journal entry
-    PUT  /journal/entry/{date} — Update fields on an existing entry
+    GET  /journal/html               — HTMX-swappable fragment (dashboard panel)
+    GET  /journal/page               — Standalone full-page view with dark theme + nav bar
+    GET  /journal/entries            — JSON list of recent journal entries
+    GET  /journal/stats              — JSON aggregated statistics
+    GET  /journal/today              — JSON today's entry (if it exists)
+    GET  /journal/tags               — JSON all unique tags with usage counts
+    GET  /journal/trades             — JSON trades from trades_v2 (source/account filter)
+    GET  /journal/trades/html        — HTMX trade-review panel (account filter + grade UI)
+    POST /journal/save               — Save / upsert a daily journal entry
+    PUT  /journal/entry/{date}       — Update fields on an existing entry
+    POST /journal/trades/{id}/grade  — Set / update the quality grade on a trade
+    POST /journal/sync               — Manually trigger Rithmic fill → trades_v2 sync
+    GET  /journal/sync/status        — Last sync result (from Redis cache)
 
 Provides endpoints for saving end-of-day journal entries,
 retrieving journal history, computing journal statistics,
-and an improved HTMX-powered UI with inline editing and tag filtering.
+auto-syncing trades from Rithmic fills, and an improved HTMX-powered UI
+with inline editing, tag filtering, and account-level trade review.
 """
 
+import logging
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
@@ -30,9 +37,31 @@ from lib.core.models import (
     save_daily_journal,
 )
 
+logger = logging.getLogger("api.journal")
+
 _EST = ZoneInfo("America/New_York")
 
 router = APIRouter(tags=["journal"])
+
+# ---------------------------------------------------------------------------
+# Sync request model
+# ---------------------------------------------------------------------------
+
+
+class SyncRequest(BaseModel):
+    """Optional body for POST /journal/sync."""
+
+    account_key: str | None = Field(
+        None,
+        description="Sync only this Rithmic account key.  Omit to sync all enabled accounts.",
+    )
+
+
+class GradeRequest(BaseModel):
+    """Request body for grading a trade from the journal route."""
+
+    grade: str = Field(..., description="Grade: A, B, C, D, or F (empty string to clear)")
+    notes: str = Field("", description="Optional free-form notes to append")
 
 
 # ---------------------------------------------------------------------------
@@ -750,27 +779,106 @@ _JOURNAL_BODY = """\
   #journal-page-wrapper select { font-size: 12px !important; }
 </style>
 
+<!-- Page-level tab bar -->
+<div style="display:flex;gap:4px;margin-bottom:1rem;border-bottom:1px solid var(--border-subtle);
+            padding-bottom:.5rem">
+  <button id="jp-tab-daily"
+          onclick="jpShowTab('daily')"
+          style="padding:5px 14px;border-radius:7px 7px 0 0;border:1px solid transparent;
+                 background:var(--bg-panel);color:var(--text-primary);font-weight:700;
+                 font-size:.78rem;cursor:pointer;font-family:inherit;
+                 border-color:var(--border-panel);border-bottom-color:var(--bg-panel)">
+    📓 Daily Log
+  </button>
+  <button id="jp-tab-trades"
+          onclick="jpShowTab('trades')"
+          style="padding:5px 14px;border-radius:7px 7px 0 0;border:1px solid transparent;
+                 background:transparent;color:var(--text-muted);font-weight:500;
+                 font-size:.78rem;cursor:pointer;font-family:inherit">
+    📋 Trade Review
+  </button>
+</div>
+
 <!-- Journal content wrapper — single full-width panel -->
 <div id="journal-page-wrapper"
      style="background:var(--bg-panel);border:1px solid var(--border-panel);
             border-radius:10px;padding:1.25rem;max-width:1200px;
-            min-height:calc(100vh - 180px)">
+            min-height:calc(100vh - 220px)">
 
-  <!-- #journal-panel-inner is the HTMX swap target used by all inner
-       interactions (tag filters, edit rows, limit selector, save form).
-       The outer wrapper uses a different ID so there is no ambiguity when
-       _render_journal_panel returns its own <div id="journal-panel-inner">
-       and HTMX replaces the innerHTML of THIS div with that response. -->
-  <div id="journal-panel-inner"
-       hx-get="/journal/html?limit=60"
-       hx-trigger="load"
-       hx-swap="outerHTML">
-    <div style="padding:3rem;text-align:center;color:var(--text-faint);font-size:.85rem">
-      Loading journal&hellip;
+  <!-- Daily log tab -->
+  <div id="jp-section-daily">
+    <!-- #journal-panel-inner is the HTMX swap target used by all inner
+         interactions (tag filters, edit rows, limit selector, save form).
+         The outer wrapper uses a different ID so there is no ambiguity when
+         _render_journal_panel returns its own <div id="journal-panel-inner">
+         and HTMX replaces the innerHTML of THIS div with that response. -->
+    <div id="journal-panel-inner"
+         hx-get="/journal/html?limit=60"
+         hx-trigger="load"
+         hx-swap="outerHTML">
+      <div style="padding:3rem;text-align:center;color:var(--text-faint);font-size:.85rem">
+        Loading journal&hellip;
+      </div>
+    </div>
+  </div>
+
+  <!-- Trade Review tab (hidden until selected) -->
+  <div id="jp-section-trades" style="display:none">
+    <div id="journal-trades-panel"
+         hx-get="/journal/trades/html?limit=50&source=rithmic_sync"
+         hx-trigger="revealed"
+         hx-swap="outerHTML">
+      <div style="padding:3rem;text-align:center;color:var(--text-faint);font-size:.85rem">
+        Loading trade review&hellip;
+      </div>
     </div>
   </div>
 
 </div>
+
+<script>
+(function() {
+  'use strict';
+  function jpShowTab(name) {
+    var tabs = ['daily', 'trades'];
+    tabs.forEach(function(t) {
+      var sec = document.getElementById('jp-section-' + t);
+      var btn = document.getElementById('jp-tab-' + t);
+      if (!sec || !btn) return;
+      var isActive = (t === name);
+      sec.style.display = isActive ? 'block' : 'none';
+      if (isActive) {
+        btn.style.background = 'var(--bg-panel)';
+        btn.style.color = 'var(--text-primary)';
+        btn.style.fontWeight = '700';
+        btn.style.borderColor = 'var(--border-panel)';
+        btn.style.borderBottomColor = 'var(--bg-panel)';
+        // Trigger htmx load on the trades panel when first revealed
+        if (t === 'trades') {
+          var panel = document.getElementById('journal-trades-panel');
+          if (panel && panel.getAttribute('hx-trigger') === 'revealed') {
+            htmx.trigger(panel, 'revealed');
+            panel.removeAttribute('hx-trigger');
+          }
+        }
+      } else {
+        btn.style.background = 'transparent';
+        btn.style.color = 'var(--muted, #71717a)';
+        btn.style.fontWeight = '500';
+        btn.style.borderColor = 'transparent';
+        btn.style.borderBottomColor = 'transparent';
+      }
+    });
+    try { localStorage.setItem('journalTab', name); } catch(e) {}
+  }
+  // Restore last tab
+  try {
+    var last = localStorage.getItem('journalTab');
+    if (last && last !== 'daily') { jpShowTab(last); }
+  } catch(e) {}
+  window.jpShowTab = jpShowTab;
+})();
+</script>
 """
 
 
@@ -899,6 +1007,8 @@ def get_journal_trades(
     account: str | None = Query(None, description="Filter by account key (matched against notes field)"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of trades to return"),
     status: str | None = Query(None, description="Filter by status: 'OPEN', 'CLOSED', 'CANCELLED'"),
+    date_from: str | None = Query(None, description="Filter trades on or after this date (YYYY-MM-DD)"),
+    date_to: str | None = Query(None, description="Filter trades on or before this date (YYYY-MM-DD)"),
 ):
     """Return recent trades from trades_v2, spanning both manual and rithmic_sync sources.
 
@@ -927,6 +1037,14 @@ def get_journal_trades(
         if status:
             conditions.append("status = ?")
             params.append(status.upper())
+
+        if date_from:
+            conditions.append("created_at >= ?")
+            params.append(date_from)
+
+        if date_to:
+            conditions.append("created_at <= ?")
+            params.append(f"{date_to} 23:59:59")
 
         where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
         sql = f"""
@@ -969,6 +1087,548 @@ def get_journal_trades(
         }
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Failed to retrieve trades: {exc}") from exc
+
+
+# ---------------------------------------------------------------------------
+# Trade review HTML panel (HTMX fragment — account filter + grade UI)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/trades/html", response_class=HTMLResponse)
+def get_journal_trades_html(
+    account: str | None = Query(None, description="Filter by account key"),
+    source: str | None = Query(None, description="Filter: manual | rithmic_sync"),
+    status: str | None = Query(None, description="Filter: OPEN | CLOSED"),
+    limit: int = Query(50, ge=1, le=500),
+    date_from: str | None = Query(None),
+    date_to: str | None = Query(None),
+):
+    """Return an HTMX-swappable HTML fragment for the trade review panel.
+
+    Includes an account filter dropdown (populated from distinct account keys
+    found in the notes column of trades_v2) and a per-trade grade selector.
+    """
+    try:
+        conn = _get_conn()
+
+        # --- Collect known account keys from rithmic_sync trades ---
+        acct_rows = conn.execute(
+            "SELECT DISTINCT notes FROM trades_v2 WHERE source = 'rithmic_sync' LIMIT 200"
+        ).fetchall()
+
+        known_accounts: list[str] = []
+        import re as _re
+
+        for row in acct_rows:
+            notes_val = row[0] if isinstance(row, (list, tuple)) else row.get("notes", "")
+            # Extract account key pattern: "rithmic_sync:KEY" or "[KEY]"
+            m = _re.search(r"rithmic_sync:([^\s\[]+)", str(notes_val))
+            if m:
+                ak = m.group(1).strip()
+                if ak and ak not in known_accounts:
+                    known_accounts.append(ak)
+            m2 = _re.search(r"\[([^\]]+)\]", str(notes_val))
+            if m2:
+                ak2 = m2.group(1).strip()
+                if ak2 and ak2 not in known_accounts:
+                    known_accounts.append(ak2)
+
+        conn.close()
+
+        # --- Build query params to fetch trades ---
+        conditions: list[str] = []
+        params: list = []
+        if source:
+            conditions.append("source = ?")
+            params.append(source)
+        if account:
+            conditions.append("notes LIKE ?")
+            params.append(f"%{account}%")
+        if status:
+            conditions.append("status = ?")
+            params.append(status.upper())
+        if date_from:
+            conditions.append("created_at >= ?")
+            params.append(date_from)
+        if date_to:
+            conditions.append("created_at <= ?")
+            params.append(f"{date_to} 23:59:59")
+
+        where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        sql = f"""
+            SELECT id, created_at, asset, direction, entry, close_price,
+                   contracts, status, pnl, rr, strategy, notes,
+                   COALESCE(grade, '') AS grade,
+                   COALESCE(source, 'manual') AS source
+            FROM trades_v2
+            {where}
+            ORDER BY created_at DESC
+            LIMIT ?
+        """
+        params.append(limit)
+
+        conn2 = _get_conn()
+        rows = conn2.execute(sql, tuple(params)).fetchall()
+        conn2.close()
+
+        trades = []
+        for row in rows:
+            if hasattr(row, "keys"):
+                trades.append({k: row[k] for k in row})
+            elif hasattr(row, "_data"):
+                trades.append(dict(row._data))
+            else:
+                trades.append(dict(row))
+
+        # --- Render HTML ---
+        now_str = datetime.now(tz=_EST).strftime("%I:%M %p ET")
+
+        # Account filter dropdown
+        acct_options = '<option value="">All accounts</option>'
+        for ak in sorted(known_accounts):
+            sel = "selected" if ak == account else ""
+            acct_options += f'<option value="{ak}" {sel}>{ak}</option>'
+
+        source_options = ""
+        for sv, sl in [("", "All sources"), ("rithmic_sync", "Rithmic sync"), ("manual", "Manual")]:
+            sel = "selected" if sv == (source or "") else ""
+            source_options += f'<option value="{sv}" {sel}>{sl}</option>'
+
+        status_options = ""
+        for sv, sl in [("", "All statuses"), ("OPEN", "Open"), ("CLOSED", "Closed"), ("CANCELLED", "Cancelled")]:
+            sel = "selected" if sv == (status or "") else ""
+            status_options += f'<option value="{sv}" {sel}>{sl}</option>'
+
+        # Build filter bar query string helper (preserves all current filters)
+        def _qs(**overrides) -> str:
+            base = {
+                "account": account or "",
+                "source": source or "",
+                "status": status or "",
+                "limit": str(limit),
+                "date_from": date_from or "",
+                "date_to": date_to or "",
+            }
+            base.update({k: v for k, v in overrides.items() if v is not None})
+            parts = [f"{k}={v}" for k, v in base.items() if v]
+            return ("?" + "&".join(parts)) if parts else ""
+
+        # Sync status badge
+        sync_status_html = ""
+        try:
+            from lib.services.engine.journal_sync import get_last_sync_status
+
+            last_sync = get_last_sync_status()
+            if last_sync:
+                ts = last_sync.get("timestamp", "")[:16].replace("T", " ")
+                written = last_sync.get("trades_written", 0)
+                fills = last_sync.get("fills_retrieved", 0)
+                st = last_sync.get("status", "")
+                color = "#22c55e" if st == "ok" else "#fbbf24" if st == "partial" else "#ef4444"
+                sync_status_html = (
+                    f'<span style="font-size:8px;color:{color};margin-left:8px" title="Last sync: {ts}">'
+                    f"⟳ synced {ts} — {fills} fills → {written} trades</span>"
+                )
+        except Exception:
+            pass
+
+        # Trade rows
+        grade_colors = {"A": "#22c55e", "B": "#4ade80", "C": "#fbbf24", "D": "#fb923c", "F": "#ef4444"}
+
+        rows_html = ""
+        for t in trades:
+            tid = t.get("id", "")
+            asset = str(t.get("asset", ""))
+            direction = str(t.get("direction", ""))
+            entry = float(t.get("entry") or 0.0)
+            close = t.get("close_price")
+            pnl = t.get("pnl")
+            contracts = int(t.get("contracts") or 1)
+            tstatus = str(t.get("status", ""))
+            grade = str(t.get("grade") or "")
+            src = str(t.get("source") or "manual")
+            created = str(t.get("created_at", ""))[:16]
+            notes_val = str(t.get("notes") or "")
+
+            dir_color = "#22c55e" if direction == "LONG" else "#ef4444"
+            pnl_color = "#22c55e" if (pnl or 0) > 0 else ("#ef4444" if (pnl or 0) < 0 else "#a1a1aa")
+            pnl_str = f"+${pnl:,.2f}" if (pnl or 0) > 0 else (f"${pnl:,.2f}" if pnl is not None else "—")
+            close_str = f"{close:.4f}" if close is not None else "open"
+            src_badge_bg = "rgba(96,165,250,0.15)" if src == "rithmic_sync" else "rgba(113,113,122,0.15)"
+            src_badge_color = "#60a5fa" if src == "rithmic_sync" else "#a1a1aa"
+            src_label = "sync" if src == "rithmic_sync" else "manual"
+
+            grade_color = grade_colors.get(grade, "#71717a")
+            grade_opts = "".join(
+                f'<option value="{g}" {"selected" if g == grade else ""}>{g or "—"}</option>'
+                for g in ["", "A", "B", "C", "D", "F"]
+            )
+
+            # Extract account key from notes for display
+            import re as _re2
+
+            acct_display = ""
+            m = _re2.search(r"rithmic_sync:([^\s\[]+)", notes_val)
+            if m:
+                acct_display = m.group(1)[:12]
+            elif "[" in notes_val:
+                m2 = _re2.search(r"\[([^\]]+)\]", notes_val)
+                if m2:
+                    acct_display = m2.group(1)[:12]
+
+            rows_html += f"""
+            <tr style="border-bottom:1px solid var(--border-subtle,#27272a)">
+                <td style="padding:4px 3px;white-space:nowrap;font-size:9px;color:var(--text-faint)">{created}</td>
+                <td style="padding:4px 3px;font-size:10px;color:var(--text-primary);font-weight:600">{asset}</td>
+                <td style="padding:4px 3px;font-size:9px;color:{dir_color};font-weight:700">{direction}</td>
+                <td style="padding:4px 3px;text-align:right;font-size:9px;font-family:monospace">{entry:.4f}</td>
+                <td style="padding:4px 3px;text-align:right;font-size:9px;font-family:monospace;color:var(--text-muted)">{close_str}</td>
+                <td style="padding:4px 3px;text-align:right;font-size:10px;font-weight:700;color:{pnl_color};font-family:monospace">{pnl_str}</td>
+                <td style="padding:4px 3px;text-align:center;font-size:9px;color:var(--text-muted)">{contracts}</td>
+                <td style="padding:4px 3px">
+                    <span style="font-size:8px;background:{src_badge_bg};color:{src_badge_color};
+                                 padding:1px 5px;border-radius:9999px">{src_label}</span>
+                </td>
+                <td style="padding:4px 3px;font-size:8px;color:var(--text-faint)">{acct_display}</td>
+                <td style="padding:4px 3px">
+                    <select
+                        style="font-size:9px;background:var(--bg-input,#27272a);color:{grade_color};
+                               border:1px solid var(--border-panel,#3f3f46);border-radius:3px;
+                               padding:1px 3px;cursor:pointer"
+                        hx-post="/journal/trades/{tid}/grade"
+                        hx-trigger="change"
+                        hx-target="closest tr"
+                        hx-swap="outerHTML"
+                        name="grade">
+                        {grade_opts}
+                    </select>
+                </td>
+            </tr>"""
+
+        if not rows_html:
+            rows_html = """
+            <tr>
+                <td colspan="10" style="padding:16px;text-align:center;
+                    color:var(--text-faint);font-size:11px">
+                    No trades found — try adjusting the filters above
+                </td>
+            </tr>"""
+
+        # Summary stats from visible trades
+        closed_trades = [t for t in trades if t.get("status") == "CLOSED"]
+        total_pnl = sum(float(t.get("pnl") or 0) for t in closed_trades)
+        win_trades = sum(1 for t in closed_trades if (t.get("pnl") or 0) > 0)
+        loss_trades = sum(1 for t in closed_trades if (t.get("pnl") or 0) < 0)
+        win_rate = (win_trades / len(closed_trades) * 100) if closed_trades else 0.0
+        pnl_color2 = "#22c55e" if total_pnl >= 0 else "#ef4444"
+        wr_color = "#22c55e" if win_rate >= 50 else "#f87171"
+
+        return HTMLResponse(
+            content=f"""
+<div id="journal-trades-panel">
+    <!-- Header row -->
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;flex-wrap:wrap;gap:4px">
+        <div style="font-size:8px;color:var(--text-faint)">{len(trades)} trade(s) · {now_str}{sync_status_html}</div>
+        <button
+            hx-post="/journal/sync"
+            hx-target="#journal-trades-panel"
+            hx-swap="outerHTML"
+            hx-include="[name='account_key']"
+            style="font-size:8px;padding:2px 8px;background:rgba(96,165,250,0.15);
+                   color:#60a5fa;border:1px solid rgba(96,165,250,0.3);border-radius:4px;cursor:pointer">
+            ⟳ Sync Now
+        </button>
+    </div>
+
+    <!-- Summary stats -->
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-bottom:8px">
+        <div style="background:var(--bg-panel-inner,rgba(39,39,42,0.4));border-radius:5px;padding:4px 6px;text-align:center">
+            <div style="font-size:8px;color:var(--text-faint)">Trades</div>
+            <div style="font-size:12px;font-family:monospace;font-weight:700">{len(closed_trades)}</div>
+        </div>
+        <div style="background:var(--bg-panel-inner,rgba(39,39,42,0.4));border-radius:5px;padding:4px 6px;text-align:center">
+            <div style="font-size:8px;color:var(--text-faint)">Net P&L</div>
+            <div style="font-size:12px;font-family:monospace;font-weight:700;color:{pnl_color2}">
+                {"+" if total_pnl >= 0 else ""}${total_pnl:,.0f}
+            </div>
+        </div>
+        <div style="background:var(--bg-panel-inner,rgba(39,39,42,0.4));border-radius:5px;padding:4px 6px;text-align:center">
+            <div style="font-size:8px;color:var(--text-faint)">Win Rate</div>
+            <div style="font-size:12px;font-family:monospace;font-weight:700;color:{wr_color}">{win_rate:.1f}%</div>
+        </div>
+        <div style="background:var(--bg-panel-inner,rgba(39,39,42,0.4));border-radius:5px;padding:4px 6px;text-align:center">
+            <div style="font-size:8px;color:var(--text-faint)">W / L</div>
+            <div style="font-size:12px;font-family:monospace;font-weight:700">
+                <span style="color:#22c55e">{win_trades}</span>
+                <span style="color:var(--text-faint)"> / </span>
+                <span style="color:#ef4444">{loss_trades}</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px;align-items:center">
+        <select name="account_key"
+                style="font-size:9px;background:var(--bg-input,#27272a);color:var(--text-secondary);
+                       border:1px solid var(--border-panel,#3f3f46);border-radius:3px;padding:1px 4px"
+                hx-get="/journal/trades/html"
+                hx-trigger="change"
+                hx-target="#journal-trades-panel"
+                hx-swap="outerHTML"
+                hx-include="[name='src_filter'],[name='status_filter'],[name='limit_filter']">
+            {acct_options}
+        </select>
+        <select name="src_filter"
+                style="font-size:9px;background:var(--bg-input,#27272a);color:var(--text-secondary);
+                       border:1px solid var(--border-panel,#3f3f46);border-radius:3px;padding:1px 4px"
+                hx-get="/journal/trades/html"
+                hx-trigger="change"
+                hx-target="#journal-trades-panel"
+                hx-swap="outerHTML"
+                hx-include="[name='account_key'],[name='status_filter'],[name='limit_filter']">
+            {source_options}
+        </select>
+        <select name="status_filter"
+                style="font-size:9px;background:var(--bg-input,#27272a);color:var(--text-secondary);
+                       border:1px solid var(--border-panel,#3f3f46);border-radius:3px;padding:1px 4px"
+                hx-get="/journal/trades/html"
+                hx-trigger="change"
+                hx-target="#journal-trades-panel"
+                hx-swap="outerHTML"
+                hx-include="[name='account_key'],[name='src_filter'],[name='limit_filter']">
+            {status_options}
+        </select>
+        <select name="limit_filter"
+                style="font-size:9px;background:var(--bg-input,#27272a);color:var(--text-secondary);
+                       border:1px solid var(--border-panel,#3f3f46);border-radius:3px;padding:1px 4px"
+                hx-get="/journal/trades/html"
+                hx-trigger="change"
+                hx-target="#journal-trades-panel"
+                hx-swap="outerHTML"
+                hx-include="[name='account_key'],[name='src_filter'],[name='status_filter']">
+            {"".join(f'<option value="{n}" {"selected" if n == limit else ""}>{n} trades</option>' for n in [25, 50, 100, 200])}
+        </select>
+    </div>
+
+    <!-- Trade table -->
+    <div style="overflow-x:auto;max-height:420px;overflow-y:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:10px">
+            <thead>
+                <tr style="border-bottom:2px solid var(--border-panel,#3f3f46)">
+                    <th style="padding:3px;text-align:left;font-size:8px;color:var(--text-faint);font-weight:600">Time</th>
+                    <th style="padding:3px;text-align:left;font-size:8px;color:var(--text-faint);font-weight:600">Symbol</th>
+                    <th style="padding:3px;text-align:left;font-size:8px;color:var(--text-faint);font-weight:600">Side</th>
+                    <th style="padding:3px;text-align:right;font-size:8px;color:var(--text-faint);font-weight:600">Entry</th>
+                    <th style="padding:3px;text-align:right;font-size:8px;color:var(--text-faint);font-weight:600">Exit</th>
+                    <th style="padding:3px;text-align:right;font-size:8px;color:var(--text-faint);font-weight:600">P&amp;L</th>
+                    <th style="padding:3px;text-align:center;font-size:8px;color:var(--text-faint);font-weight:600">Qty</th>
+                    <th style="padding:3px;text-align:left;font-size:8px;color:var(--text-faint);font-weight:600">Src</th>
+                    <th style="padding:3px;text-align:left;font-size:8px;color:var(--text-faint);font-weight:600">Acct</th>
+                    <th style="padding:3px;text-align:left;font-size:8px;color:var(--text-faint);font-weight:600">Grade</th>
+                </tr>
+            </thead>
+            <tbody>
+                {rows_html}
+            </tbody>
+        </table>
+    </div>
+</div>"""
+        )
+
+    except Exception as exc:
+        return HTMLResponse(
+            content=f'<div style="color:#ef4444;font-size:10px;padding:8px">Trade panel error: {exc}</div>'
+        )
+
+
+# ---------------------------------------------------------------------------
+# Grade endpoint (journal-scoped — mirrors /trades/{id}/grade)
+# ---------------------------------------------------------------------------
+
+
+@router.post("/trades/{trade_id}/grade")
+def journal_grade_trade(trade_id: int, grade: str = Query(..., description="Grade: A, B, C, D, F or empty")):
+    """Set the quality grade on a trade from the journal UI.
+
+    This is the HTMX target for the grade <select> in the trade review panel.
+    Returns a replacement <tr> row fragment on success.
+
+    Accepted grades: A, B, C, D, F (or empty string to clear).
+    """
+    valid_grades = {"A", "B", "C", "D", "F", ""}
+    g = grade.strip().upper()
+    if g and g not in valid_grades:
+        raise HTTPException(status_code=422, detail=f"Invalid grade '{g}'. Use A, B, C, D, F or empty.")
+
+    conn = _get_conn()
+    try:
+        result = conn.execute(
+            "UPDATE trades_v2 SET grade = ? WHERE id = ?",
+            (g, trade_id),
+        )
+        rowcount = getattr(result, "rowcount", None)
+        if rowcount is not None and rowcount == 0:
+            conn.close()
+            raise HTTPException(status_code=404, detail=f"Trade {trade_id} not found")
+        conn.commit()
+
+        # Re-fetch the row to return updated <tr>
+        row = conn.execute(
+            """SELECT id, created_at, asset, direction, entry, close_price,
+                      contracts, status, pnl, rr, strategy, notes,
+                      COALESCE(grade, '') AS grade,
+                      COALESCE(source, 'manual') AS source
+               FROM trades_v2 WHERE id = ?""",
+            (trade_id,),
+        ).fetchone()
+        conn.close()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        conn.close()
+        raise HTTPException(status_code=500, detail=f"Failed to update grade: {exc}") from exc
+
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"Trade {trade_id} not found after update")
+
+    if hasattr(row, "keys"):
+        t = {k: row[k] for k in row}
+    elif hasattr(row, "_data"):
+        t = dict(row._data)
+    else:
+        t = dict(row)
+
+    grade_colors = {"A": "#22c55e", "B": "#4ade80", "C": "#fbbf24", "D": "#fb923c", "F": "#ef4444"}
+    asset = str(t.get("asset", ""))
+    direction = str(t.get("direction", ""))
+    entry = float(t.get("entry") or 0.0)
+    close = t.get("close_price")
+    pnl = t.get("pnl")
+    contracts = int(t.get("contracts") or 1)
+    grade_val = str(t.get("grade") or "")
+    src = str(t.get("source") or "manual")
+    created = str(t.get("created_at", ""))[:16]
+    notes_val = str(t.get("notes") or "")
+
+    dir_color = "#22c55e" if direction == "LONG" else "#ef4444"
+    pnl_color = "#22c55e" if (pnl or 0) > 0 else ("#ef4444" if (pnl or 0) < 0 else "#a1a1aa")
+    pnl_str = f"+${pnl:,.2f}" if (pnl or 0) > 0 else (f"${pnl:,.2f}" if pnl is not None else "—")
+    close_str = f"{close:.4f}" if close is not None else "open"
+    src_badge_bg = "rgba(96,165,250,0.15)" if src == "rithmic_sync" else "rgba(113,113,122,0.15)"
+    src_badge_color = "#60a5fa" if src == "rithmic_sync" else "#a1a1aa"
+    src_label = "sync" if src == "rithmic_sync" else "manual"
+    grade_color = grade_colors.get(grade_val, "#71717a")
+
+    import re as _re3
+
+    acct_display = ""
+    m = _re3.search(r"rithmic_sync:([^\s\[]+)", notes_val)
+    if m:
+        acct_display = m.group(1)[:12]
+    elif "[" in notes_val:
+        m2 = _re3.search(r"\[([^\]]+)\]", notes_val)
+        if m2:
+            acct_display = m2.group(1)[:12]
+
+    grade_opts = "".join(
+        f'<option value="{gv}" {"selected" if gv == grade_val else ""}>{gv or "—"}</option>'
+        for gv in ["", "A", "B", "C", "D", "F"]
+    )
+
+    from fastapi.responses import HTMLResponse as _HTML
+
+    return _HTML(
+        content=f"""
+    <tr style="border-bottom:1px solid var(--border-subtle,#27272a)">
+        <td style="padding:4px 3px;white-space:nowrap;font-size:9px;color:var(--text-faint)">{created}</td>
+        <td style="padding:4px 3px;font-size:10px;color:var(--text-primary);font-weight:600">{asset}</td>
+        <td style="padding:4px 3px;font-size:9px;color:{dir_color};font-weight:700">{direction}</td>
+        <td style="padding:4px 3px;text-align:right;font-size:9px;font-family:monospace">{entry:.4f}</td>
+        <td style="padding:4px 3px;text-align:right;font-size:9px;font-family:monospace;color:var(--text-muted)">{close_str}</td>
+        <td style="padding:4px 3px;text-align:right;font-size:10px;font-weight:700;color:{pnl_color};font-family:monospace">{pnl_str}</td>
+        <td style="padding:4px 3px;text-align:center;font-size:9px;color:var(--text-muted)">{contracts}</td>
+        <td style="padding:4px 3px">
+            <span style="font-size:8px;background:{src_badge_bg};color:{src_badge_color};
+                         padding:1px 5px;border-radius:9999px">{src_label}</span>
+        </td>
+        <td style="padding:4px 3px;font-size:8px;color:var(--text-faint)">{acct_display}</td>
+        <td style="padding:4px 3px">
+            <select
+                style="font-size:9px;background:var(--bg-input,#27272a);color:{grade_color};
+                       border:1px solid var(--border-panel,#3f3f46);border-radius:3px;
+                       padding:1px 3px;cursor:pointer"
+                hx-post="/journal/trades/{trade_id}/grade"
+                hx-trigger="change"
+                hx-target="closest tr"
+                hx-swap="outerHTML"
+                name="grade">
+                {grade_opts}
+            </select>
+        </td>
+    </tr>"""
+    )
+
+
+# ---------------------------------------------------------------------------
+# Manual sync trigger endpoint
+# ---------------------------------------------------------------------------
+
+
+@router.post("/sync")
+async def trigger_journal_sync(
+    background_tasks: BackgroundTasks,
+    req: SyncRequest | None = None,
+):
+    """Manually trigger a Rithmic fill → trades_v2 sync.
+
+    Runs the sync in the background and returns immediately with a 202.
+    The sync result is stored in Redis under ``journal:last_sync`` and
+    can be polled via ``GET /journal/sync/status``.
+
+    Requires ``async-rithmic`` to be installed and at least one enabled
+    Rithmic account with credentials configured.
+    """
+    account_key = req.account_key if req else None
+
+    async def _run_sync():
+        try:
+            from lib.services.engine.journal_sync import run_journal_sync
+
+            result = await run_journal_sync(account_key=account_key)
+            logger.info(
+                "manual journal sync complete: fills=%d matched=%d written=%d",
+                result.get("fills_retrieved", 0),
+                result.get("trades_matched", 0),
+                result.get("trades_written", 0),
+            )
+        except Exception as exc:
+            logger.error("manual journal sync error: %s", exc, exc_info=True)
+
+    background_tasks.add_task(_run_sync)
+
+    return {
+        "status": "accepted",
+        "message": "Journal sync started in background",
+        "account_key": account_key,
+        "poll": "/journal/sync/status",
+    }
+
+
+@router.get("/sync/status")
+def get_sync_status():
+    """Return the result of the most recent journal sync from Redis.
+
+    Returns ``null`` when no sync has been run yet this session.
+    """
+    try:
+        from lib.services.engine.journal_sync import get_last_sync_status
+
+        status = get_last_sync_status()
+        if status is None:
+            return {"status": "never_run", "message": "No sync has been run yet"}
+        return status
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve sync status: {exc}") from exc
 
 
 @router.get("/tags")

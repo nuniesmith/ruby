@@ -3,7 +3,7 @@
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>RUBY — Futures Trading Dashboard</title>
+        <title>Ruby Trading — Ruby Futures</title>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link
             href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Syne:wght@400;600;700;800&display=swap"
@@ -11,16 +11,115 @@
         />
         <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
         <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+        <script>
+            (function () {
+                var t = localStorage.getItem("theme");
+                if (
+                    t === "dark" ||
+                    (!t &&
+                        window.matchMedia("(prefers-color-scheme: dark)")
+                            .matches)
+                ) {
+                    document.documentElement.classList.add("dark");
+                }
+            })();
+        </script>
         <style>
+            /* ─── Shared theme variables ─── */
             :root {
-                --bg: #07090f;
-                --s1: #0c0f1a;
-                --s2: #111522;
-                --s3: #161b2e;
-                --s4: #1d2340;
-                --b1: #222847;
-                --b2: #2c3460;
-                --b3: #3a4480;
+                --bg-body: #f4f4f5;
+                --bg-panel: rgba(255, 255, 255, 0.8);
+                --bg-input: #e4e4e7;
+                --border-panel: #d4d4d8;
+                --text-primary: #18181b;
+                --text-muted: #71717a;
+                --text-faint: #a1a1aa;
+            }
+            .dark {
+                --bg-body: #09090b;
+                --bg-panel: rgba(24, 24, 27, 0.6);
+                --bg-input: #27272a;
+                --border-panel: #3f3f46;
+                --text-primary: #ffffff;
+                --text-muted: #71717a;
+            }
+
+            /* ─── Shared nav CSS ─── */
+            .co-nav {
+                display: flex;
+                align-items: center;
+                gap: 0;
+                padding: 0 1rem;
+                background: var(--bg-panel);
+                border-bottom: 1px solid var(--border-panel);
+                height: 42px;
+                position: sticky;
+                top: 0;
+                z-index: 100;
+                backdrop-filter: blur(8px);
+            }
+            .co-brand {
+                font-weight: 700;
+                font-size: 0.9rem;
+                color: var(--text-primary);
+                text-decoration: none;
+                margin-right: 1.25rem;
+                letter-spacing: -0.02em;
+            }
+            .co-nav-tab {
+                display: inline-flex;
+                align-items: center;
+                gap: 5px;
+                padding: 5px 12px;
+                border-radius: 6px;
+                text-decoration: none;
+                color: var(--text-muted);
+                font-size: 0.78rem;
+                font-weight: 500;
+                transition: all 0.12s;
+                white-space: nowrap;
+            }
+            .co-nav-tab:hover {
+                background: var(--bg-input);
+                color: var(--text-primary);
+            }
+            .co-nav-tab.active {
+                background: var(--bg-input);
+                color: var(--text-primary);
+                font-weight: 650;
+            }
+            .co-nav-right {
+                margin-left: auto;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            }
+            .co-btn {
+                font-family: var(--mono);
+                font-size: 11px;
+                font-weight: 600;
+                padding: 4px 10px;
+                border-radius: 5px;
+                cursor: pointer;
+                border: 1px solid var(--border-panel);
+                background: var(--bg-input);
+                color: var(--text-primary);
+                transition: all 0.12s;
+            }
+            .co-btn:hover {
+                background: var(--bg-panel);
+            }
+
+            /* ─── Trading color vars mapped to shared theme ─── */
+            :root {
+                --bg: var(--bg-body);
+                --s1: var(--bg-panel);
+                --s2: var(--bg-input);
+                --s3: rgba(39, 39, 42, 0.6);
+                --s4: rgba(63, 63, 70, 0.4);
+                --b1: var(--border-panel);
+                --b2: #3f3f46;
+                --b3: #52525b;
                 --green: #00e87a;
                 --green2: rgba(0, 232, 122, 0.08);
                 --green3: rgba(0, 232, 122, 0.2);
@@ -34,9 +133,9 @@
                 --purple2: rgba(167, 139, 250, 0.08);
                 --cyan: #22d3ee;
                 --cyan2: rgba(34, 211, 238, 0.08);
-                --text: #c4cade;
-                --muted: #4b5580;
-                --dim: #252b48;
+                --text: var(--text-primary);
+                --muted: var(--text-muted);
+                --dim: var(--bg-input);
                 --mono: "JetBrains Mono", monospace;
                 --head: "Syne", sans-serif;
             }
@@ -190,13 +289,14 @@
                 margin: 0;
                 padding: 0;
             }
-            html,
+            html {
+                background: var(--bg-body);
+            }
             body {
                 height: 100%;
-                background: var(--bg);
+                background: var(--bg-body);
                 color: var(--text);
                 font-family: var(--mono);
-                overflow: hidden;
             }
             ::-webkit-scrollbar {
                 width: 5px;
@@ -213,18 +313,8 @@
             /* Layout */
             #app {
                 display: grid;
-                grid-template-rows: 52px 1fr;
+                grid-template-rows: 42px 36px 1fr;
                 height: 100vh;
-            }
-            #nav {
-                background: var(--s1);
-                border-bottom: 1px solid var(--b1);
-                display: flex;
-                align-items: center;
-                padding: 0 20px;
-                gap: 0;
-                position: relative;
-                z-index: 100;
             }
             #content {
                 overflow-y: auto;
@@ -250,39 +340,7 @@
                 }
             }
 
-            /* Nav */
-            .logo {
-                display: flex;
-                align-items: center;
-                gap: 10px;
-                margin-right: 28px;
-                flex-shrink: 0;
-            }
-            .logo-dot {
-                width: 8px;
-                height: 8px;
-                border-radius: 50%;
-                background: var(--green);
-                box-shadow: 0 0 10px var(--green);
-                animation: pulse 2s infinite;
-            }
-            .logo-text {
-                font-family: var(--head);
-                font-size: 15px;
-                font-weight: 800;
-                letter-spacing: 0.12em;
-                color: #fff;
-            }
-            .logo-sub {
-                font-size: 10px;
-                color: var(--muted);
-                letter-spacing: 0.1em;
-            }
-            .nav-steps {
-                display: flex;
-                height: 100%;
-                flex: 1;
-            }
+            /* Nav steps (trading sub-nav) */
             .nav-step {
                 display: flex;
                 align-items: center;
@@ -343,28 +401,6 @@
             .nav-step.done + .step-sep {
                 background: var(--cyan);
             }
-            .nav-right {
-                margin-left: auto;
-                display: flex;
-                align-items: center;
-                gap: 10px;
-                flex-shrink: 0;
-            }
-            .plan-locked-badge {
-                font-size: 10px;
-                font-weight: 600;
-                letter-spacing: 0.08em;
-                padding: 3px 10px;
-                border-radius: 3px;
-                background: rgba(0, 232, 122, 0.12);
-                color: var(--green);
-                border: 1px solid rgba(0, 232, 122, 0.3);
-            }
-            .nav-date {
-                font-size: 10px;
-                color: var(--muted);
-            }
-
             /* Cards */
             .card {
                 background: var(--s2);
@@ -792,7 +828,7 @@
                 grid-template-columns: 1fr 340px;
                 grid-template-rows: auto 1fr;
                 gap: 12px;
-                height: calc(100vh - 52px - 36px);
+                height: calc(100vh - 42px - 36px);
             }
             #chart-area {
                 display: flex;
@@ -973,26 +1009,12 @@
                 }
             }
             @media (max-width: 768px) {
-                #nav {
-                    padding: 0 8px;
-                    overflow-x: auto;
-                    -webkit-overflow-scrolling: touch;
-                }
-                .logo {
-                    margin-right: 12px;
-                }
-                .logo-text {
-                    font-size: 13px;
-                }
                 .nav-step {
                     padding: 0 8px;
                     font-size: 10px;
                 }
                 .step-sep {
                     width: 8px;
-                }
-                .nav-right {
-                    display: none;
                 }
                 .page {
                     padding: 10px 8px;
@@ -1272,69 +1294,110 @@
     </head>
     <body>
         <div id="app">
-            <!-- ─── NAV ──────────────────────────────────────────────────────────────── -->
-            <nav id="nav">
-                <div class="logo">
-                    <div class="logo-dot"></div>
-                    <div>
-                        <div class="logo-text">RUBY</div>
-                        <div class="logo-sub">FUTURES</div>
-                    </div>
-                </div>
-
-                <div class="nav-steps" id="nav-steps">
-                    <button
-                        class="nav-step active"
-                        data-page="pipeline"
-                        data-step="0"
-                    >
-                        <span class="step-num">1</span>MORNING RUN
-                    </button>
-                    <div class="step-sep"></div>
-                    <button
-                        class="nav-step locked-out"
-                        data-page="plan"
-                        data-step="1"
-                    >
-                        <span class="step-num">2</span>CONFIRM PLAN
-                    </button>
-                    <div class="step-sep"></div>
-                    <button
-                        class="nav-step locked-out"
-                        data-page="live"
-                        data-step="2"
-                    >
-                        <span class="step-num">3</span>LIVE
-                    </button>
-                    <div class="step-sep"></div>
-                    <button
-                        class="nav-step locked-out"
-                        data-page="journal"
-                        data-step="3"
-                    >
-                        <span class="step-num">4</span>JOURNAL
-                    </button>
-                    <div class="step-sep"></div>
-                    <button
-                        class="nav-step"
-                        data-page="settings"
-                        data-step="null"
-                    >
-                        <span class="step-num">⚙</span>SETTINGS
-                    </button>
-                </div>
-
-                <div class="nav-right">
-                    <span class="nav-date" id="nav-date"></span>
+            <!-- ─── Shared top nav bar ─── -->
+            <nav class="co-nav">
+                <a class="co-brand" href="/">💎 Ruby Futures</a>
+                <a class="co-nav-tab" href="/">📊 Dashboard</a>
+                <a class="co-nav-tab active" href="/trading">🚀 Trading</a>
+                <a class="co-nav-tab" href="/charts">📈 Charts</a>
+                <a class="co-nav-tab" href="/account">💰 Account</a>
+                <a class="co-nav-tab" href="/signals">📡 Signals</a>
+                <a class="co-nav-tab" href="/journal/page">📓 Journal</a>
+                <a class="co-nav-tab" href="/connections">🔌 Connections</a>
+                <a class="co-nav-tab" href="/trainer">🧠 Trainer</a>
+                <a class="co-nav-tab" href="/settings">⚙️ Settings</a>
+                <div class="co-nav-right">
+                    <span
+                        id="nav-date"
+                        style="font-size: 0.72rem; color: var(--text-muted)"
+                    ></span>
                     <div
                         id="plan-badge"
-                        style="display: none"
-                        class="plan-locked-badge"
+                        style="
+                            display: none;
+                            font-size: 0.7rem;
+                            font-weight: 700;
+                            padding: 2px 8px;
+                            border-radius: 9999px;
+                            background: rgba(167, 139, 250, 0.15);
+                            color: #a78bfa;
+                            border: 1px solid rgba(167, 139, 250, 0.3);
+                        "
                     >
                         🔒 PLAN LOCKED
                     </div>
+                    <button
+                        class="co-btn"
+                        style="font-size: 12px; padding: 3px 8px"
+                        onclick="
+                            (function () {
+                                var d = document.documentElement;
+                                d.classList.toggle('dark');
+                                localStorage.setItem(
+                                    'theme',
+                                    d.classList.contains('dark')
+                                        ? 'dark'
+                                        : 'light',
+                                );
+                            })()
+                        "
+                        title="Toggle theme"
+                    >
+                        ☀/🌙
+                    </button>
                 </div>
             </nav>
+
+            <!-- ─── Trading workflow step sub-nav ─── -->
+            <div
+                id="trading-subnav"
+                style="
+                    background: var(--bg-panel);
+                    border-bottom: 1px solid var(--border-panel);
+                    display: flex;
+                    align-items: center;
+                    padding: 0 1rem;
+                    gap: 0;
+                    height: 36px;
+                    overflow-x: auto;
+                "
+            >
+                <button
+                    class="nav-step active"
+                    data-page="pipeline"
+                    data-step="0"
+                >
+                    <span class="step-num">1</span>MORNING RUN
+                </button>
+                <div class="step-sep"></div>
+                <button
+                    class="nav-step locked-out"
+                    data-page="plan"
+                    data-step="1"
+                >
+                    <span class="step-num">2</span>CONFIRM PLAN
+                </button>
+                <div class="step-sep"></div>
+                <button
+                    class="nav-step locked-out"
+                    data-page="live"
+                    data-step="2"
+                >
+                    <span class="step-num">3</span>LIVE
+                </button>
+                <div class="step-sep"></div>
+                <button
+                    class="nav-step locked-out"
+                    data-page="journal"
+                    data-step="3"
+                >
+                    <span class="step-num">4</span>JOURNAL
+                </button>
+                <div class="step-sep"></div>
+                <button class="nav-step" data-page="settings" data-step="null">
+                    <span class="step-num">⚙</span>SETTINGS
+                </button>
+            </div>
 
             <!-- ─── PAGES ─────────────────────────────────────────────────────────────── -->
             <div id="content">

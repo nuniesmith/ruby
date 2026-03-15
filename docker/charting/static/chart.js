@@ -2125,22 +2125,43 @@ async function resolveDataServiceUrl() {
     try {
         const res = await fetch("/config", { cache: "no-store" });
         if (res.ok) {
-            const { data_service_url } = await res.json();
+            const { data_service_url, web_service_port } = await res.json();
             if (data_service_url) {
                 const internalRe =
                     /^https?:\/\/(data|localhost|127\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/;
                 if (!internalRe.test(data_service_url)) {
+                    // Public / external URL — use it directly.
                     return data_service_url.replace(/\/$/, "");
                 }
-                const u = new URL(data_service_url);
-                return `${window.location.protocol}//${window.location.hostname}:${u.port || 8050}`;
+                // Internal Docker URL (e.g. http://data:8000) — the browser
+                // cannot reach the data service directly when API_KEY auth is
+                // enabled.  Route through the web service proxy instead, which
+                // injects the X-API-Key header on every proxied request.
+                //
+                // Priority:
+                //   1. web_service_port from /config (if charting nginx is
+                //      configured to expose it)
+                //   2. The port the chart was actually loaded from — when
+                //      embedded via /charting-proxy/ the iframe origin is
+                //      already the web service (e.g. http://hostname:8080)
+                //   3. Hardcoded fallback of 8080 (web service default)
+                const loadedPort = parseInt(window.location.port, 10);
+                const resolvedPort =
+                    web_service_port ||
+                    (loadedPort && loadedPort !== 8003 ? loadedPort : 8080);
+                return `${window.location.protocol}//${window.location.hostname}:${resolvedPort}`;
             }
         }
     } catch (_) {
         // /config unreachable — fall through to fallback
     }
 
-    return `${window.location.protocol}//${window.location.hostname}:8050`;
+    // Last-resort fallback: use the port this page was served from (works
+    // when the chart is embedded via the web-service charting proxy), or
+    // fall back to the standard web-service port 8080.
+    const loadedPort = parseInt(window.location.port, 10);
+    const fallbackPort = loadedPort && loadedPort !== 8003 ? loadedPort : 8080;
+    return `${window.location.protocol}//${window.location.hostname}:${fallbackPort}`;
 }
 
 // ── Control wiring ─────────────────────────────────────────────────────────────

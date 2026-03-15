@@ -845,8 +845,10 @@ app.include_router(static_pages_router, tags=["Static Pages"])
 # KRAKEN-SIM-C: Asset selection & opportunity scoring for pre-session workflow.
 # NOTE: pretrade_router is mounted WITHOUT a prefix — routes are defined with /api/pretrade/ paths.
 from lib.services.data.api.pretrade import router as pretrade_router  # noqa: E402
+from lib.services.data.api.pretrade import sse_router as pretrade_sse_router  # noqa: E402
 
 app.include_router(pretrade_router, tags=["Pre-Trade Analysis"])
+app.include_router(pretrade_sse_router, tags=["Pre-Trade SSE"])
 
 
 # ---------------------------------------------------------------------------

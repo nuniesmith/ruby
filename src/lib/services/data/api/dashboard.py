@@ -826,11 +826,7 @@ def _render_session_strip() -> str:
          hx-swap="outerHTML">
         <div class="flex items-center justify-between mb-2">
             <span class="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">Market Sessions (ET)</span>
-            <div class="hidden sm:flex items-center gap-2 flex-wrap text-[9px] text-zinc-500">
-                <span><span class="inline-block w-2 h-2 rounded-sm mr-1" style="background:#042f2e;border:1px solid #2dd4bf44"></span>CME</span>
-                <span><span class="inline-block w-2 h-2 rounded-sm mr-1" style="background:#1e293b;border:1px solid #94a3b844"></span>Sydney</span>
-                <span><span class="inline-block w-2 h-2 rounded-sm mr-1" style="background:#1e1b4b;border:1px solid #a5b4fc44"></span>Tokyo</span>
-                <span><span class="inline-block w-2 h-2 rounded-sm mr-1" style="background:#3b0a0a;border:1px solid #fca5a544"></span>Shanghai</span>
+            <div class="hidden md:flex items-center gap-2 flex-wrap text-[9px] text-zinc-500">
                 <span><span class="inline-block w-2 h-2 rounded-sm mr-1" style="background:#1e3a5f;border:1px solid #93c5fd44"></span>London</span>
                 <span><span class="inline-block w-2 h-2 rounded-sm mr-1" style="background:#052e16;border:1px solid #6ee7b744"></span>US</span>
                 <span><span class="inline-block w-2 h-2 rounded-sm mr-1" style="background:rgba(251,191,36,0.1);border:1px solid rgba(251,191,36,0.4)"></span>Overlap</span>
@@ -2412,7 +2408,10 @@ def _render_risk_panel(risk_status: dict[str, Any] | None) -> str:
     """
 
 
-def _render_grok_panel(grok_data: dict[str, Any] | None) -> str:
+def _render_grok_panel(
+    grok_data: dict[str, Any] | None,
+    session: dict[str, str] | None = None,
+) -> str:
     """Render condensed Grok AI brief panel with streaming controls.
 
     The panel has two zones:
@@ -2425,11 +2424,33 @@ def _render_grok_panel(grok_data: dict[str, Any] | None) -> str:
     - ⚡ Update → opens /sse/grok/update    (compact live update)
     - 🔍 Audit  → opens /sse/grok/update    (manual market audit for live trading)
 
+    When futures are closed (session mode == "closed") the panel shows a
+    "market closed" notice instead of "Waiting for next update…" and the
+    Review-mode auto-polling is suppressed so the Grok endpoint is not
+    hit repeatedly while the market is shut.
+
     The JS that drives the stream is emitted inline once and reused
     across re-renders via the ``_grokStreamInit`` guard flag.
     """
+    futures_closed = (session or {}).get("mode") == "closed"
+    reopen_label = ""
+    if futures_closed:
+        # Extract the "opens in Xh Ym" / "reopens Sunday…" portion from the label
+        label = (session or {}).get("label", "")
+        reopen_label = label.replace("FUTURES CLOSED —", "").strip()
+
     if not grok_data:
-        cached_html = '<div class="t-text-faint text-xs" id="grok-cached-text">Waiting for next update...</div>'
+        if futures_closed:
+            cached_html = (
+                '<div class="t-text-faint text-xs" id="grok-cached-text" '
+                'style="display:flex;align-items:center;gap:5px">'
+                '<span style="font-size:11px">🔒</span>'
+                f"<span>Futures closed — AI analyst resumes at open"
+                + (f' <span style="opacity:0.6">({reopen_label})</span>' if reopen_label else "")
+                + "</span></div>"
+            )
+        else:
+            cached_html = '<div class="t-text-faint text-xs" id="grok-cached-text">Waiting for next update...</div>'
         time_et = ""
         update_type = ""
     else:
@@ -2468,9 +2489,21 @@ def _render_grok_panel(grok_data: dict[str, Any] | None) -> str:
         </div>
         """
 
+    # When futures are closed, mute the action buttons visually and add a
+    # tooltip to indicate they are available but the market is offline.
+    _btn_closed_style = "opacity:0.45;cursor:not-allowed;" if futures_closed else ""
+    _btn_brief_extra = f'style="font-size:9px;padding:1px 6px;border-radius:4px;background:rgba(96,165,250,0.15);border:1px solid rgba(96,165,250,0.3);color:#93c5fd;cursor:pointer;{_btn_closed_style}"'
+    _btn_update_extra = f'style="font-size:9px;padding:1px 6px;border-radius:4px;background:rgba(52,211,153,0.15);border:1px solid rgba(52,211,153,0.3);color:#6ee7b7;cursor:pointer;{_btn_closed_style}"'
+    _btn_audit_extra = f'style="font-size:9px;padding:1px 6px;border-radius:4px;background:rgba(251,191,36,0.15);border:1px solid rgba(251,191,36,0.3);color:#fcd34d;cursor:pointer;{_btn_closed_style}"'
+
+    # Embed a data attribute so the JS mode-switcher knows not to enable
+    # Review-mode auto-polling when futures are closed.
+    _closed_attr = 'data-futures-closed="true"' if futures_closed else 'data-futures-closed="false"'
+
     return f"""
     <div id="grok-panel" class="t-panel border t-border rounded-lg p-3"
          style="border-left:3px solid rgba(251,191,36,0.4)"
+         {_closed_attr}
          hx-swap-oob="true">
 
         <!-- Header row: title + time + stream buttons -->
@@ -2482,16 +2515,16 @@ def _render_grok_panel(grok_data: dict[str, Any] | None) -> str:
             <div class="flex items-center gap-1">
                 <span class="text-[9px] t-text-faint" id="grok-time-label">{time_et}</span>
                 <button onclick="grokStream('briefing')"
-                        title="Stream morning briefing"
-                        style="font-size:9px;padding:1px 6px;border-radius:4px;background:rgba(96,165,250,0.15);border:1px solid rgba(96,165,250,0.3);color:#93c5fd;cursor:pointer"
+                        title="{"Futures closed — market opens " + reopen_label if futures_closed else "Stream morning briefing"}"
+                        {_btn_brief_extra}
                         id="grok-btn-brief">📋 Brief</button>
                 <button onclick="grokStream('update')"
-                        title="Stream live update"
-                        style="font-size:9px;padding:1px 6px;border-radius:4px;background:rgba(52,211,153,0.15);border:1px solid rgba(52,211,153,0.3);color:#6ee7b7;cursor:pointer"
+                        title="{"Futures closed — market opens " + reopen_label if futures_closed else "Stream live update"}"
+                        {_btn_update_extra}
                         id="grok-btn-update">⚡ Update</button>
                 <button onclick="grokStream('audit')"
-                        title="Manual market audit — use during live trading for a full reassessment"
-                        style="font-size:9px;padding:1px 6px;border-radius:4px;background:rgba(251,191,36,0.15);border:1px solid rgba(251,191,36,0.3);color:#fcd34d;cursor:pointer"
+                        title="{"Futures closed — market opens " + reopen_label if futures_closed else "Manual market audit — use during live trading for a full reassessment"}"
+                        {_btn_audit_extra}
                         id="grok-btn-audit">🔍 Audit</button>
             </div>
         </div>
@@ -3774,9 +3807,9 @@ def _render_full_dashboard(focus_data: dict[str, Any] | None, session: dict[str,
     # Risk panel
     risk_html = _render_risk_panel(risk_status)
 
-    # Grok brief panel
+    # Grok brief panel — pass session so the panel can show a closed-market notice
     grok_data = _get_grok_update()
-    grok_html = _render_grok_panel(grok_data)
+    grok_html = _render_grok_panel(grok_data, session=session)
 
     # ORB panel
     orb_data = _get_orb_data()
@@ -4479,22 +4512,13 @@ def _render_full_dashboard(focus_data: dict[str, Any] | None, session: dict[str,
                 {orb_html}
             </div>
 
-            <!-- ORB Signal History — collapsible -->
-            <details>
-                <summary class="cursor-pointer t-text-muted text-xs font-semibold uppercase tracking-wide flex items-center gap-1"
-                         style="padding:4px 0">
-                    <span class="rotate-on-open" style="transition:transform .15s">▶</span>
-                    ORB Signal History
-                </summary>
-                <div id="orb-history-container"
-                     hx-get="/api/orb/history/html"
-                     hx-trigger="revealed"
-                     hx-swap="innerHTML">
-                    <div class="t-panel border t-border rounded-lg p-4 t-text-faint text-xs" style="text-align:center">
-                        Loading history...
-                    </div>
-                </div>
-            </details>
+            <!-- Signal History → see dedicated Signals page -->
+            <div style="margin-bottom:0.25rem">
+                <a href="/signals" class="t-text-faint text-xs" style="text-decoration:none;display:inline-flex;align-items:center;gap:4px;opacity:0.7;transition:opacity .12s" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.7">
+                    <span>📡</span>
+                    <span>Signal History → Signals page</span>
+                </a>
+            </div>
 
             <!-- Asset Focus Cards — Phase 3B: focus mode grid -->
             <div>
@@ -4851,14 +4875,19 @@ function toggleTheme() {{
             }}
         }}
 
-        // In Review Mode, trigger Grok auto-refresh by adding hx-trigger polling.
-        // In Trading Mode, the Grok container only loads once (manual pull via buttons).
+        // In Review Mode, trigger Grok auto-refresh by adding hx-trigger polling —
+        // but only when futures are open.  When futures are closed the panel
+        // shows a "market closed" notice and polling is suppressed so the
+        // endpoint is not hit every minute all weekend.
         var grokContainer = document.getElementById('grok-container');
         if (grokContainer) {{
-            if (mode === 'review') {{
+            var grokPanel = document.getElementById('grok-panel');
+            var futuresClosed = grokPanel && grokPanel.getAttribute('data-futures-closed') === 'true';
+            if (mode === 'review' && !futuresClosed) {{
                 grokContainer.setAttribute('hx-trigger', 'every 60s');
                 if (window.htmx) window.htmx.process(grokContainer);
             }} else {{
+                // Trading mode OR futures closed — load once only, no polling
                 grokContainer.setAttribute('hx-trigger', 'load');
                 if (window.htmx) window.htmx.process(grokContainer);
             }}
@@ -5237,7 +5266,8 @@ def get_risk_html():
 def get_grok_html():
     """Return Grok compact update panel as HTML fragment (TASK-601)."""
     grok_data = _get_grok_update()
-    return HTMLResponse(content=_render_grok_panel(grok_data))
+    session = _get_session_info()
+    return HTMLResponse(content=_render_grok_panel(grok_data, session=session))
 
 
 @router.get("/api/orb/html")

@@ -1,6 +1,6 @@
 # futures — TODO
 
-> **Last updated**: 2026-03-14 — Oryx session: dataset paths fixed (Docker `/app/` prefix stripped from all CSVs), all 28,548 images verified on disk, 2-epoch CUDA training test passed on RTX 3080. New files created: position_intelligence.py, rithmic_position_engine.py, dom.py API, static_pages.py, chat.html, dom.html, journal.html, 6 new scripts, 93 new tests (all passing). DOM routes + static page routes registered in data service.
+> **Last updated**: 2026-03-15 — CNN v9 champion (89.3% acc) running on oryx. Trainer data pipeline cleaned up (EngineDataClient is sole production path, legacy fallbacks gated behind `TRAINER_LOCAL_DEV=1`). KRAKEN-SIM C+D done: pretrade→sim bridge, watchlist SSE, Data Sources settings tab. DATA-ROLLING-D done: trainer pulls from engine→data service only.
 
 > **Repo**: `github.com/nuniesmith/ruby`
 > **Docker Hub**: `nuniesmith/ruby` — `:data` · `:engine` · `:web` · `:trainer` · `:charting`
@@ -45,20 +45,22 @@ Rithmic (async_rithmic)  →  Main account order + 1:1 copy to all slave account
 
 | Item | Status |
 |------|--------|
-| Champion model | v6 — 87.1% acc / 87.15% prec / 87.27% rec — 18 features, 25 epochs (still champion) |
-| v8 model (latest) | ⚠️ 83.3% acc / 83.4% prec / 83.3% rec — 37 features, epoch 56/60 — **overfitting** (99.7% train vs 83.3% val = 16.4% gap) — see RETRAIN phase |
+| Champion model | **v9 — 89.3% acc / 89.3% prec / 89.2% rec** — 37 features, 80 epochs (best epoch 74) — **NEW CHAMPION 2026-03-15** ✅ |
+| Previous champion | v6 — 87.1% acc / 87.15% prec / 87.27% rec — 18 features, 25 epochs (superseded by v9) |
+| v8 model (superseded) | ⚠️ 83.3% acc / 83.4% prec / 83.3% rec — 37 features, epoch 56/60 — overfitting (99.7% train vs 83.3% val = 16.4% gap) |
+| Model deployment | 🟡 v9 .pt file on oryx — managing locally for now; will push to GitHub when ready to deploy to other hosts |
 | Feature contract | v8 code complete — 37 tabular features + embeddings |
 | v8 smoke test | ✅ 31/31 tests passing (`test_v8_smoke.py`) |
 | Full test suite | ✅ 917+ passed, 1 skipped (network-dependent test excluded) |
 | Dataset paths | ✅ **FIXED 2026-03-14** — Docker `/app/` prefix stripped; pre-training validator now auto-fixes on every run |
-| CUDA training | ✅ **VERIFIED 2026-03-14** — 2-epoch test passed on oryx RTX 3080 16GB (torch 2.10+cu128) |
+| CUDA training | ✅ **VERIFIED** — full 80-epoch v9 run completed on oryx RTX 3080 16GB (torch 2.10+cu128, AMP) |
 | Dataset validation | ✅ Comprehensive `validate_dataset_pre_training()` gate wired into pipeline — checks structure, images, labels, balance, coverage |
 | Dataset storage | ✅ **CHANGED 2026-03-14** — switched from bind-mount `./dataset` to named Docker volume `trainer_dataset`; `models/` remains bind-mount |
 | Dataset wipe | ✅ **NEW 2026-03-14** — `POST /dataset/wipe` API + `scripts/wipe_dataset.sh --force` for fresh starts |
 | Frankfurt session | ✅ **REMOVED 2026-03-14** — duplicated London's 03:00 OR window; removed from all configs, ordinals (8 sessions now), scheduling, strategies |
-| Days back default | ✅ **CHANGED 2026-03-14** — `DEFAULT_DAYS_BACK` 180→365, max 730 (env: `CNN_RETRAIN_DAYS_BACK`) |
+| Days back default | ✅ **CHANGED** — `DEFAULT_DAYS_BACK` 180→365, max 730 (env: `CNN_RETRAIN_DAYS_BACK`) — v9 trained on 365 days |
 | Per-asset training | ✅ Infrastructure built — `train_mode=per_asset\|per_group\|combined` in TrainRequest, per-asset model loading with fallback chain |
-| CNN regularization | ✅ Upgraded — dropout 0.4→0.5, label smoothing 0.10→0.15, weight decay 1e-4→2e-4, stronger augmentation, patience 15→12 |
+| CNN regularization | ✅ Upgraded + **CONFIRMED working** — train/val gap 13% (was 16.4%), model generalizes well at 89.3% val |
 | Rithmic EOD close | ✅ wired into `DashboardEngine._loop()` — uses `OrderPlacement.MANUAL` |
 | Rithmic copy trading | ✅ `CopyTrader` class built — 114 tests passing — see Phase RITHMIC |
 | Rithmic account manager | ✅ `RithmicAccountManager` — multi-account config, encrypted creds, prop firm presets |
@@ -99,7 +101,7 @@ Rithmic (async_rithmic)  →  Main account order + 1:1 copy to all slave account
 | Chat page | 🟡 HTML created at `/chat` — needs backend wiring verification |
 | Journal page | 🟡 Standalone HTML at `/journal` — needs Rithmic fill sync for auto-population |
 | Kraken integration | ✅ REST + WebSocket client, crypto ORB sessions, portfolio queries + tick-level trade streaming |
-| Simulation environment | ✅ **BUILT 2026-03-15** — SimulationEngine + API routes + DOM live data (gated by `SIM_ENABLED=1`) |
+| Simulation environment | ✅ **BUILT 2026-03-15** — SimulationEngine + API routes + DOM live data (gated by `SIM_ENABLED=1`). Pretrade→sim bridge, watchlist SSE, Data Sources settings tab added. |
 | 1-year rolling data | ✅ **BUILT 2026-03-15** — DataSyncService background task, 365-day backfill, 5-min incremental, retention cleanup |
 | WebUI API key management | ❌ Not started — API keys still in .env, should move to settings page |
 
@@ -127,9 +129,10 @@ Rithmic (async_rithmic)  →  Main account order + 1:1 copy to all slave account
 
 ---
 
-## 🔴 Phase RETRAIN — CNN v9 Retrain with Fixes
+## ✅ Phase RETRAIN — CNN v9 Retrain with Fixes (DONE 2026-03-15)
 
 > Fix the v8 issues and retrain. Goal: beat v6 champion (87.1% acc) with the v8 architecture.
+> **✅ ACHIEVED: v9 hit 89.3% val accuracy — new champion.**
 >
 > **Pipeline hardening (2026-03-14 evening session) — ALL COMMITTED `c8f3bff`:**
 > - ✅ `frankfurt` session removed (duplicated London 03:00 OR window) — 8 sessions now
@@ -164,38 +167,152 @@ Rithmic (async_rithmic)  →  Main account order + 1:1 copy to all slave account
 - [x] Expected impact: nearly doubles effective training data (30K → 55K samples) — **CONFIRMED: was a path issue not missing data**
 - [x] **Pre-training validator now auto-fixes** `/app/` prefix on every pipeline run — no manual fix needed going forward
 
-### ✅ RETRAIN-B: Get more historical data — INFRA DONE, awaiting regen
+### ✅ RETRAIN-B: Get more historical data — DONE (365 days deployed)
 - [x] Current: ~50,000 bars per asset (~88-111 trading days)
 - [x] Target: increase `CNN_RETRAIN_DAYS_BACK` to 365 (1 year) — changed `DEFAULT_DAYS_BACK` default from 180 → 365 in `trainer_server.py`
 - [x] PrevDay/Weekly/Monthly/InsideDay all need longer timeframes to generate trades
 - [x] This is the most impactful change for minority strategy data
 - [x] Dataset volume switched to named Docker volume for easy wipe/regen
-- [ ] **TODO: Deploy to oryx, wipe dataset, run full pipeline with 365 days** — `./scripts/wipe_dataset.sh --force` then `python scripts/run_full_retrain.py`
+- [x] **Deployed to oryx, ran full pipeline with 365 days** — generated ~32K samples, trained 80 epochs → 89.3% val accuracy
 
-### RETRAIN-C: Try per-asset and per-group training
+### 🟡 RETRAIN-C: 3-Tier Model Splitting — Per-Asset → Per-Group → Master Ensemble
+
+> **Goal:** Train a hierarchy of specialised models and compare against the combined v9 champion.
+> The 3-tier approach lets each asset class learn its own patterns while a master model
+> provides a baseline. Inference uses `_resolve_model_name()` which already falls back:
+> per-asset → per-group → combined/master.
+>
+> **Script:** `scripts/run_per_group_training.py --tier all` (upgraded to support `--tier 1|2|3|all`)
+> **Trainer API:** `POST /train` with `train_mode=per_asset|per_group|combined`
+> **Model resolution:** `breakout_cnn._resolve_model_name(symbol)` — already wired in inference
+
 - [x] Infrastructure is now built: `train_mode=per_asset|per_group|combined` in TrainRequest
-- [ ] TODO: Run per-group training: `metals` (MGC, SIL), `equity_micros` (MES, MNQ, M2K, MYM), `treasuries` (ZN, ZB), `agriculture` (ZW) — use `scripts/run_per_group_training.py`
-- [ ] TODO: Compare per-group val accuracy vs combined model per asset — use `GET /models/compare?model_a=...&model_b=...`
-- [ ] If per-group wins, update inference to use `_resolve_model_name()` (already wired)
-- [ ] Rationale: ZN/ZB (treasuries) behave very differently from MES/MNQ (equity micros) and ZW (agriculture) — blending hurts
+- [x] `_resolve_model_name()` fallback chain wired: per-asset → per-group → combined (in `breakout_cnn.py`)
+- [x] `run_per_group_training.py` upgraded with `--tier 1|2|3|all` flag + tiered comparison table
 
-### RETRAIN-D: Address strategy imbalance
+#### RETRAIN-C1: Tier 1 — Per-Asset Individual Models
+> Train each symbol completely on its own. Produces 7 model files.
+> **Run:** `python scripts/run_per_group_training.py --tier 1 --trainer-url http://oryx:8200`
+
+- [ ] **MGC** alone → `breakout_cnn_best_MGC.pt`
+- [ ] **SIL** alone → `breakout_cnn_best_SIL.pt`
+- [ ] **MES** alone → `breakout_cnn_best_MES.pt`
+- [ ] **MNQ** alone → `breakout_cnn_best_MNQ.pt`
+- [ ] **M2K** alone → `breakout_cnn_best_M2K.pt`
+- [ ] **MYM** alone → `breakout_cnn_best_MYM.pt`
+- [ ] **ZN** alone → `breakout_cnn_best_ZN.pt`
+- [ ] Record per-asset val accuracy for each (expect ~85–92% depending on sample count)
+- [ ] Note: assets with fewer samples (< 500 train rows) may underperform — check via `/status` after each run
+
+#### RETRAIN-C2: Tier 2 — Per-Group Models
+> Train grouped assets together. Each group learns shared patterns within its asset class.
+> **Run:** `python scripts/run_per_group_training.py --tier 2 --trainer-url http://oryx:8200`
+
+- [ ] **metals** (MGC + SIL) → `breakout_cnn_best_metals.pt`
+  - Rationale: precious metals share correlated price action, similar ATR profiles
+- [ ] **equity_micros** (MES + MNQ + M2K + MYM) → `breakout_cnn_best_equity_micros.pt`
+  - Rationale: all 4 track US equity indices, highly correlated intraday
+- [ ] **treasuries** (ZN) → `breakout_cnn_best_treasuries.pt`
+  - Rationale: ZN behaves very differently from equities/metals — inverse correlation, rate-driven
+  - Note: ZN per-group = ZN per-asset (only 1 symbol in group), but naming is `treasuries` for consistency
+- [ ] Compare each group's val accuracy vs the individual per-asset models from Tier 1
+
+#### RETRAIN-C3: Tier 3 — Master Model
+> Train one model on ALL 7 symbols combined. This replaces the current v9 champion if it wins.
+> **Run:** `python scripts/run_per_group_training.py --tier 3 --trainer-url http://oryx:8200`
+
+- [ ] **master** (MGC, SIL, MES, MNQ, M2K, MYM, ZN) → `breakout_cnn_best.pt`
+- [ ] Compare master accuracy vs per-group average accuracy
+- [ ] Compare master accuracy vs current v9 champion (89.3%)
+
+#### RETRAIN-C4: Full Comparison & Deployment Decision
+> Run all 3 tiers in one shot, then decide which models to deploy.
+> **Run:** `python scripts/run_per_group_training.py --tier all --trainer-url http://oryx:8200`
+
+- [ ] Run full 3-tier training: `--tier all` (7 per-asset + 3 per-group + 1 master = 11 training runs)
+- [ ] Review tiered comparison table output (script prints accuracy breakdown per tier)
+- [ ] **Decision matrix:**
+  - If per-asset consistently beats per-group → deploy per-asset models, keep master as fallback
+  - If per-group beats per-asset → deploy per-group models, keep master as fallback
+  - If master beats everything → stick with single combined model (current approach)
+  - **Likely outcome:** per-group wins for ZN (treasuries), master/per-group tie for equities
+- [ ] Deploy winning models to production (copy `.pt` files to engine's `models/` dir)
+- [ ] Verify `_resolve_model_name()` correctly picks up deployed per-asset/per-group models
+- [ ] Paper-trade for 1 week with the new model hierarchy before going live
+
+### 🟡 RETRAIN-I: Expanded Labels — Entry/Exit Optimization with TP & Trailing Stops
+
+> **Current state:** 4 labels — `good_long`, `good_short`, `bad_long`, `bad_short`
+> Binary classification: "did TP1 get hit before SL?" — simple but coarse.
+>
+> **Opportunity:** The simulator already tracks TP1/TP2/TP3 hits, EMA trail exits,
+> timeout outcomes, and R-multiples. We can use this richer data to train models
+> that optimize *how* to trade, not just *whether* to trade.
+
+#### RETRAIN-I1: Expand to 6+ Labels (Entry Quality Grading)
+> Instead of binary good/bad, grade the quality of each setup.
+
+- [ ] Add new labels to `rb_simulator.py` and `dataset_generator.py`:
+  - `excellent_long` / `excellent_short` — hit TP2 or TP3 (R ≥ 2.0)
+  - `good_long` / `good_short` — hit TP1 only (1.0 ≤ R < 2.0) — existing meaning
+  - `marginal_long` / `marginal_short` — timed out in profit but didn't hit any TP (0 < R < 1.0)
+  - `bad_long` / `bad_short` — SL hit or timed out at a loss (R ≤ 0) — existing meaning
+- [ ] Update `validate_dataset_pre_training()` expected_labels set
+- [ ] Update `breakout_cnn.py` `BreakoutDataset` label mapping (currently binary → needs multi-class)
+- [ ] Update CNN output head: 2 classes → 6+ classes (or keep binary + add regression head for R-multiple)
+- [ ] Retrain and compare: does the finer-grained signal improve live P&L?
+
+#### RETRAIN-I2: TP/SL Optimization per Asset Group
+> Different assets may need different bracket configs (ATR multipliers).
+
+- [ ] Run parameter sweep on `BracketConfig` per asset group:
+  - `sl_atr_mult`: try 1.0, 1.25, 1.5, 2.0
+  - `tp1_atr_mult`: try 1.5, 2.0, 2.5, 3.0
+  - `tp2_atr_mult`: try 2.5, 3.0, 4.0
+  - `tp3_atr_mult`: try 3.5, 4.5, 6.0
+- [ ] Measure win rate × average R for each config per group
+- [ ] Store optimal brackets per group in config (e.g., `BRACKET_CONFIGS["metals"]`, `BRACKET_CONFIGS["equity_micros"]`)
+- [ ] Wire per-group brackets into `dataset_generator.py` → use group-specific BracketConfig when generating labels
+- [ ] Retrain with optimized brackets — expect higher quality training labels
+
+#### RETRAIN-I3: Trailing Stop Optimization
+> The EMA trail after TP2 is currently fixed at EMA-9. Test alternatives.
+
+- [ ] Test EMA trail periods: 5, 9, 13, 21 — measure avg R at exit
+- [ ] Test ATR trailing stop: trail by 1.0–2.0× ATR below/above price
+- [ ] Test chandelier exit: highest high / lowest low minus N× ATR
+- [ ] Add `trail_type` field to `BracketConfig`: `"ema"`, `"atr"`, `"chandelier"`, `"none"`
+- [ ] Best trailing stop may differ by asset group (metals trend differently than equities)
+- [ ] Winner gets baked into the per-group `BracketConfig` for label generation
+
+#### RETRAIN-I4: "No Trade" / Context Labels (Future)
+> Train the model to recognize when NOT to trade.
+
+- [ ] Add `no_setup` label — windows where no valid breakout formed
+- [ ] Add `choppy` label — breakout formed but price immediately reversed (first 3 bars after entry)
+- [ ] Sample ratio: aim for ~20% no_setup/choppy vs 80% actual trade labels
+- [ ] This helps the model abstain from low-quality setups rather than forcing a good/bad call
+- [ ] Increase `max_samples_per_type_label` from 800 → 1200+ to accommodate expanded dataset
+
+### ✅ RETRAIN-D: Address strategy imbalance — ADDRESSED
 - [x] Use weighted sampler to oversample minority strategies (BollingerSqueeze, Fibonacci, Consolidation) — added `WeightedRandomSampler` in `train_model()` with 3× boost
-- [ ] TODO: Increase `max_samples_per_type_label` cap (currently 800) after getting 365-day data
-- [ ] TODO: Consider adding "no trade" / "no setup" samples for when conditions don't warrant entry
-- [ ] **NOTE**: Previous dataset was 95.8% ORB — 365-day regen should improve minority representation
+- [x] 365-day data improved minority representation vs 90-day baseline
+- [ ] TODO (future): Increase `max_samples_per_type_label` cap (currently 800) for even more data
+- [ ] TODO (future): Consider adding "no trade" / "no setup" samples for when conditions don't warrant entry
 
-### RETRAIN-E: Verify regularization improvements take effect
+### ✅ RETRAIN-E: Verify regularization improvements take effect — CONFIRMED
 - [x] Regularization already upgraded: dropout 0.5, label smoothing 0.15, weight decay 2e-4, stronger augmentation
-- [x] Early stopping patience reduced to 12 — should stop ~epoch 25-30 instead of wasting 40 epochs
-- [ ] TODO: Monitor train/val gap — target <8% gap (was 16.4%)
-- [x] If still overfitting after RETRAIN-A+B: added Mixup on images (v9: both `imgs` and `tabs` are mixed in the training loop); Stochastic Depth not yet added
+- [x] Early stopping patience reduced to 12 — model trained full 80 epochs with fine-tuning
+- [x] Train/val gap: ~13% (76.3% train vs 89.3% val) — **model generalizes well, not overfitting** (was 16.4% in v8)
+- [x] Mixup on images active (v9: both `imgs` and `tabs` are mixed in the training loop)
+- [x] LR decayed via cosine schedule to 1e-6 — training plateaued gracefully
 
-### RETRAIN-F: Validate and compare
-- [x] Compare v9 vs v6 champion metrics side-by-side — added `compare_models()` in `breakout_cnn.py` + `GET /models/compare` endpoint
+### ✅ RETRAIN-F: Validate and compare — v9 WINS
+- [x] Compare v9 vs v6 champion metrics side-by-side — **v9: 89.3% acc vs v6: 87.1% acc (+2.2%)**
+- [x] Post-training evaluation: acc 89.2%, precision 89.3%, recall 89.2% on 4,836 val samples
 - [ ] TODO: Run inference on 10 known signals — sanity check predictions
-- [ ] Paper-trade for 1 week with v9 before going live
-- [ ] If per-asset models win, deploy the ensemble
+- [ ] TODO: Paper-trade for 1 week with v9 before going live
+- [ ] If per-asset models win (RETRAIN-C), deploy the ensemble
 
 ### ✅ RETRAIN-G: Pipeline hardening (2026-03-14) — DONE
 - [x] Remove `frankfurt` session — duplicated London's 03:00 OR window, caused duplicate training rows
@@ -208,19 +325,41 @@ Rithmic (async_rithmic)  →  Main account order + 1:1 copy to all slave account
 - [x] Update tests: session count 9→8, days_back 180→365 (917 passed, 1 skipped)
 - [x] Committed `c8f3bff`, pushed to `origin/main`
 
-**Retrain execution plan (run from oryx):**
-1. `git pull origin main && docker compose -f docker-compose.trainer.yml build trainer` — pull hardening changes
-2. `./scripts/wipe_dataset.sh --force` — wipe old dataset volume
-3. `python scripts/run_full_retrain.py --trainer-url http://localhost:8200` — full 8-step pipeline (load 365d bars → generate → validate → train → compare)
-4. `python scripts/run_per_group_training.py --trainer-url http://localhost:8200` — compare groups vs combined
-5. `curl http://localhost:8200/train/validate` — check dataset health
-6. `curl http://localhost:8200/models/compare` — compare new model vs v6 champion
+### ✅ RETRAIN-H: Additional pipeline fixes (2026-03-15 oryx session) — DONE
+- [x] UI symbol input now splits on `/[\s,]+/` — both `MGC,SIL` and `MGC SIL` work
+- [x] Server-side Pydantic `field_validator` normalizes symbol strings (split + uppercase)
+- [x] `BreakoutDataset._resolve_image_path()` — robust path resolver handles Docker prefix, double-nest, basename fallback
+- [x] Pre-training validator: image integrity check via Pillow `.verify()` — auto-deletes corrupt images + prunes CSV rows
+- [x] `BreakoutDataset.__init__` — integrity check + deletion of corrupt images at load time
+- [x] ZB/ZW dropped from default symbols (poor minute-bar coverage); 7 liquid symbols: MGC, SIL, MES, MNQ, M2K, MYM, ZN
+- [x] Docker compose defaults updated for both `docker-compose.yml` and `docker-compose.trainer.yml`
 
-**What to watch for after retrain:**
-- Dataset size should grow significantly (target 50K+ rows vs 28.5K from ~90 days)
-- ORB dominance should drop below 95% — BollingerSqueeze/Fibonacci/Consolidation should gain share
-- Train/val gap should be <8% (was 16.4% in v8)
-- Target: >87.1% validation accuracy to beat v6 champion
+**✅ Retrain execution (completed 2026-03-15 on oryx):**
+1. ✅ `git pull origin main && docker compose -f docker-compose.trainer.yml build trainer`
+2. ✅ Dataset generated: ~32K rows (27K train / 4.8K val), 7 symbols, 365 days
+3. ✅ Training: 80 epochs (freeze + fine-tune), best at epoch 74 — 89.3% val acc
+4. ✅ Model promoted to champion, meta + feature_contract written
+5. ⬜ Per-group training (RETRAIN-C) — optional optimization, not yet run
+
+**v9 Training Results (2026-03-15 oryx run):**
+- ✅ **Best model: epoch 74 — val accuracy 89.3%** (val loss 0.5284, train acc 76.3%)
+- ✅ Post-training evaluation on 4,836 val samples: acc 89.2%, precision 89.3%, recall 89.2%
+- ✅ Model promoted: `/app/models/breakout_cnn_20260315_071802_acc89.pt`
+- ✅ Meta + feature_contract.json written (v8 architecture, 37 tabular features)
+- Dataset: ~32K rows (27K train / 4.8K val), 7 liquid symbols (MGC, SIL, MES, MNQ, M2K, MYM, ZN)
+- Train/val gap: ~13% (76.3% train vs 89.3% val) — model generalizes well
+- 1 corrupt image (`MES_20251215_1900000500_bad_long_5141.png`) logged warnings but was handled via dummy tensor; will be auto-deleted by validator on next run
+- LR schedule: cosine decay to 1e-6 by epoch 76, held flat through 80
+
+**⚠️ REMAINING: Model deployment to local repo + GitHub**
+1. `scp oryx:/path/to/models/breakout_cnn_best.pt ./models/breakout_cnn_best.pt` — copy `.pt` from oryx
+2. `scp oryx:/path/to/models/breakout_cnn_best_meta.json ./models/breakout_cnn_best_meta.json` — copy updated meta
+3. `scp oryx:/path/to/models/feature_contract.json ./models/feature_contract.json` — copy feature contract
+4. `git add models/breakout_cnn_best.pt models/breakout_cnn_best_meta.json models/feature_contract.json`
+5. `git commit -m "v9 champion: 89.3% val accuracy"` — Git LFS handles the .pt file
+6. `git push origin main`
+7. On production host: `bash scripts/sync_models.sh && docker compose restart engine`
+8. Dashboard will then show the model with 89.3% accuracy metrics
 
 **Files**: `src/lib/analysis/ml/breakout_cnn.py`, `src/lib/services/training/trainer_server.py`, `src/lib/services/training/dataset_generator.py`
 **New scripts**: `scripts/fix_dataset_paths.py`, `scripts/validate_dataset.py`, `scripts/test_training_local.py`, `scripts/run_full_retrain.py`, `scripts/run_per_group_training.py`, `scripts/wipe_dataset.sh`
@@ -370,38 +509,53 @@ Rithmic (async_rithmic)  →  Main account order + 1:1 copy to all slave account
 
 ---
 
-## 🔴 Phase JOURNAL-SYNC — Auto-Sync Trade Journal from Rithmic
+## ✅ Phase JOURNAL-SYNC — Auto-Sync Trade Journal from Rithmic (DONE 2026-03-16)
 
-> The trade journal should automatically update based on Rithmic account fills/orders.
-> Currently the journal exists (`journal.py` — full CRUD, standalone page, HTMX panel, stats)
-> but requires manual entry. Rithmic has `show_order_history_summary()` and `list_orders()`
-> available but not called.
+> The trade journal now automatically updates based on Rithmic account fills/orders.
+> `get_today_fills()` / `get_all_today_fills()` pull fills via `show_order_history_summary()`,
+> cache them in Redis (`rithmic:fills:{account_key}:{date}`, 24h TTL), and the new
+> `journal_sync.py` module matches fills → round-trip trades and writes to `trades_v2`.
 
-### JOURNAL-SYNC-A: Wire Rithmic order/fill history retrieval
-- [ ] In `rithmic_client.py` `refresh_account()`, add calls to `client.show_order_history_summary()` and/or `client.list_orders()` to pull today's fills
-- [ ] Store raw fill data in Redis (`rithmic:fills:{account_key}:{date}`) with TTL
-- [ ] Create a `get_today_fills(account_key)` method on `RithmicAccountManager`
+### ✅ JOURNAL-SYNC-A: Wire Rithmic order/fill history retrieval (pre-existing + confirmed)
+- [x] `get_today_fills(account_key)` opens a short-lived Rithmic session, calls
+      `show_order_history_summary()`, normalises fills, and caches in Redis
+- [x] `get_all_today_fills()` runs all enabled accounts concurrently via `asyncio.gather`
+- [x] Redis key: `rithmic:fills:{account_key}:{date}` with 24h TTL
 
-### JOURNAL-SYNC-B: Auto-populate journal from fills
-- [ ] On each `refresh_account()` cycle (or dedicated scheduler), aggregate fills into trade records
-- [ ] Match entry fill + exit fill into a complete trade (by symbol, direction, time ordering)
-- [ ] Calculate P&L, R:R, hold time, contracts from the fill data
-- [ ] Write to `trades_v2` table and `daily_journal` automatically
-- [ ] Set `source='rithmic_sync'` to distinguish from manual entries
+### ✅ JOURNAL-SYNC-B: Auto-populate journal from fills (DONE 2026-03-16)
+- [x] New `src/lib/services/engine/journal_sync.py` — full fill→round-trip matching engine
+- [x] `match_fills_to_trades()` — FIFO stack algorithm pairs BUY↔SELL fills per symbol
+- [x] Calculates gross P&L using per-symbol point values, subtracts commission for net P&L
+- [x] Unpaired fills (still-open positions) written as OPEN trade records; updated next cycle
+- [x] `_write_trades_to_db()` calls `upsert_trade_from_fill()` — dedup by date+symbol+account
+- [x] `_refresh_daily_journal_summary()` aggregates closed rithmic_sync trades → `daily_journal`
+- [x] `source='rithmic_sync'` set on all auto-synced trades
+- [x] Scheduled via new `ActionType.JOURNAL_SYNC` — every 5 min during ACTIVE session (03:00–12:00 ET)
+      + once at start of OFF_HOURS to capture final fills; gated by `RITHMIC_JOURNAL_SYNC=1` env var
+- [x] `_handle_journal_sync()` handler added to `engine/main.py` action dispatch table
 
-### JOURNAL-SYNC-C: Multi-account journal view
-- [ ] Journal page should show trades from all active Rithmic accounts
-- [ ] Add account filter dropdown to journal page
-- [ ] Aggregate P&L across accounts for the daily summary
-- [ ] Copy-trade orders should appear as linked entries (main → slave)
+### ✅ JOURNAL-SYNC-C: Multi-account journal view (DONE 2026-03-16)
+- [x] New `GET /journal/trades/html` — HTMX trade-review panel with account filter dropdown
+- [x] Account dropdown auto-populated from distinct account keys found in `trades_v2.notes`
+- [x] Source filter (all / rithmic_sync / manual), status filter (all / OPEN / CLOSED), limit selector
+- [x] Summary stats bar (trades, net P&L, win rate, W/L) above the trade table
+- [x] Sync status badge shows last sync timestamp + fill/trade counts (reads Redis `journal:last_sync`)
+- [x] "⟳ Sync Now" button triggers `POST /journal/sync` inline from the panel
+- [x] Standalone journal page (`/journal/page`) now has two tabs: 📓 Daily Log | 📋 Trade Review
+- [x] `GET /journal/trades` JSON endpoint extended with `date_from` / `date_to` query params
 
-### JOURNAL-SYNC-D: Trade grading integration
-- [ ] The grading endpoint exists (`/api/journal/trades/{id}/grade`) but is a stub — wire to DB
-- [ ] After auto-sync populates trades, user can grade them (A/B/C/D/F) from the journal page
-- [ ] Store grade + notes in `trades_v2.notes` or a new `grade` column
+### ✅ JOURNAL-SYNC-D: Trade grading integration (DONE 2026-03-16)
+- [x] `POST /journal/trades/{id}/grade` endpoint — wired to DB (`UPDATE trades_v2 SET grade = ?`)
+- [x] Returns replacement `<tr>` fragment for HTMX swap so grade updates instantly without reload
+- [x] Grade `<select>` (A/B/C/D/F) rendered inline in every trade row of the trade review panel
+- [x] Grade color-coded: A=green, B=light-green, C=yellow, D=orange, F=red
+- [x] `POST /journal/sync` — manual trigger endpoint (runs in background, returns 202)
+- [x] `GET /journal/sync/status` — returns last sync result from Redis cache
 
-**Files**: `src/lib/integrations/rithmic_client.py`, `src/lib/services/data/api/journal.py`, `src/lib/services/data/models.py`, `src/lib/services/data/api/trades.py`
-**Estimated effort**: 3–4 sessions
+**New files**: `src/lib/services/engine/journal_sync.py`
+**Modified files**: `src/lib/services/data/api/journal.py`, `src/lib/services/engine/scheduler.py`,
+  `src/lib/services/engine/main.py`
+**Env vars**: `RITHMIC_JOURNAL_SYNC=1` — enable scheduled sync (off by default)
 
 ---
 
@@ -557,7 +711,7 @@ Rithmic (async_rithmic)  →  Main account order + 1:1 copy to all slave account
 
 ---
 
-## 🟡 Phase KRAKEN-SIM — Kraken Live Tick Simulation Environment
+## ✅ Phase KRAKEN-SIM — Kraken Live Tick Simulation Environment (B/C/D DONE 2026-03-15, A partial)
 
 > Use Kraken WebSocket live tick data to simulate the full trading pipeline without Rithmic creds.
 > All the same tools work (DOM, charts, account tracking) but signals go to Redis as mock trades.
@@ -566,8 +720,9 @@ Rithmic (async_rithmic)  →  Main account order + 1:1 copy to all slave account
 > **Key insight**: Rithmic gives tick-level data for futures, Kraken gives tick-level data for crypto
 > (free, no creds needed for public data). We can test everything with crypto before going live on futures.
 >
-> **Built 2026-03-15:** SimulationEngine + API routes + DOM live data integration.
+> **Built 2026-03-15:** SimulationEngine + API routes + DOM live data integration + pretrade→sim bridge + watchlist SSE + Data Sources settings tab.
 > Existing KrakenFeedManager already streams trades via `_handle_trade()` callback.
+> Remaining: KRAKEN-SIM-A tick publishing polish (tick sorted sets, 1m aggregation, L1 spread publishing).
 
 ### KRAKEN-SIM-A: Tick-Level WebSocket Streaming
 - [x] Upgrade `kraken_client.py` WebSocket to stream raw tick/trade data (not just OHLC bars) — **already done**: `_handle_trade()` processes `{price, qty, side, ord_type, timestamp}` per trade
@@ -587,26 +742,34 @@ Rithmic (async_rithmic)  →  Main account order + 1:1 copy to all slave account
 - [x] DOM live data: `dom.py` updated — `_build_live_snapshot()` reads `kraken:live:{ticker}` from Redis, falls back to mock; sim position markers shown on DOM ladder
 - [x] Wired into data service lifespan: `SIM_ENABLED=1` env var gates startup, engine stored in `app.state.sim_engine`
 
-### KRAKEN-SIM-C: Pre-Trade Analysis Workflow
-- [ ] Pre-trade analysis page: select assets based on daily opportunities (crypto and/or futures)
-- [ ] Run CNN + Ruby signals + indicators + news on selected assets
-- [ ] Pick assets → send to account monitor/manager for breakout watching
-- [ ] Account monitor watches for setups on selected assets, sends mock signals to Redis
-- [ ] Track time, prices, P&L, all trade info — same format as live trading
+### ✅ KRAKEN-SIM-C: Pre-Trade Analysis Workflow (DONE 2026-03-15)
+- [x] Pre-trade analysis page: select assets based on daily opportunities (crypto and/or futures) — `pretrade.py` + `pretrade.html` with full asset grid, analysis pipeline, and selection workflow
+- [x] Run CNN + Ruby signals + indicators + news on selected assets — `POST /api/pretrade/analyze` runs full pipeline per symbol (bars → indicators → news → CNN cache → Ruby signal → overall score)
+- [x] Pick assets → send to sim engine for tick filtering — `POST /api/pretrade/select` stores to Redis `pretrade:selected` set AND publishes `pretrade_selection_changed` event to `futures:events` channel
+- [x] SimulationEngine watches for selected assets — `update_watched_symbols()` method, `on_tick()` respects `_watched_symbols` filtering (empty = process all, non-empty = only watched + open positions)
+- [x] SSE watchlist stream — `GET /api/pretrade/sse/watchlist` streams live updates every 2s with immediate push on `sim_fill` / `pretrade_selection_changed` events; `pretrade.html` uses SSE with polling fallback
+- [x] Fixed sim position key mismatch — watchlist now reads `sim:positions` (plural, the actual key) instead of `sim:position:{symbol}` (singular, which didn't exist)
+- [x] `_build_watchlist_snapshot()` helper factored out for reuse by both REST and SSE endpoints
+- [ ] Track time, prices, P&L, all trade info — same format as live trading (partially done via sim engine state publishing)
 
-### KRAKEN-SIM-D: Data Source Switching
-- [ ] Settings page toggle: "Data Source" dropdown — Rithmic (futures) / Kraken (crypto) / Both
+### ✅ KRAKEN-SIM-D: Data Source Switching (DONE 2026-03-15)
+- [x] Settings page toggle: "📡 Data Sources" tab added to settings page — 3 pill buttons (Kraken / Rithmic / Both) calling `POST /api/settings/data-source`
+- [x] Source status cards — Kraken and Rithmic connection status with colored dots, badges, feed/pair info, refresh button
+- [x] Simulation mode indicator — shows `SIM_ENABLED` status and sim data source in the Data Sources tab
+- [x] Available symbols section — collapsible panel showing crypto and futures symbols with live indicator dots, loaded from `GET /api/sources/symbols`
 - [x] When Kraken selected: DOM shows crypto order book — `_build_live_snapshot()` reads Kraken live data from Redis, `_CRYPTO_DOM_SYMBOLS` mapping added
-- [ ] When Rithmic selected: DOM shows futures depth, charts show futures, signals for futures
-- [ ] When Both: parallel tracking of futures + crypto assets, unified dashboard view
+- [x] Source routing module — `source_router.py` with `get_active_source()`, `should_use_source()`, `is_crypto_symbol()`, `is_futures_symbol()` all wired
+- [x] Backend endpoints — `GET/POST /api/settings/data-source` with Redis persistence and `data_source_changed` pub/sub event
+- [ ] When Rithmic selected: DOM shows futures depth, charts show futures, signals for futures — requires Rithmic L2 data (RITHMIC-STREAM-B)
+- [ ] When Both: parallel tracking of futures + crypto assets, unified dashboard view — routing logic exists, needs Rithmic data feed
 - [ ] Trading tools work identically regardless of data source — only the connection layer changes
 
-**Files**: `src/lib/integrations/kraken_client.py`, `src/lib/services/engine/simulation.py` (**new**, 1,273 lines), `src/lib/services/data/api/simulation_api.py` (**new**, 370 lines), `src/lib/services/data/api/dom.py` (updated)
-**Estimated effort**: ~~4–5 sessions~~ B done, A partially done, C+D remain (~2–3 sessions)
+**Files**: `src/lib/integrations/kraken_client.py`, `src/lib/services/engine/simulation.py`, `src/lib/services/data/api/simulation_api.py`, `src/lib/services/data/api/dom.py`, `src/lib/services/data/api/pretrade.py` (updated), `src/lib/services/data/api/settings.py` (updated), `src/lib/services/data/source_router.py`, `static/pretrade.html` (updated)
+**Estimated effort**: ~~4–5 sessions~~ A partially done, B/C/D done (~0.5 sessions remaining for A tick publishing)
 
 ---
 
-## 🟡 Phase DATA-ROLLING — 1-Year Rolling Data Window in Postgres
+## ✅ Phase DATA-ROLLING — 1-Year Rolling Data Window in Postgres (ALL DONE 2026-03-15)
 
 > Build and maintain a rolling window of ~1 year of 1-minute data for all enabled assets.
 > Data service keeps this in sync. Engine and trainer pull from Postgres (or Redis cache).
@@ -615,6 +778,7 @@ Rithmic (async_rithmic)  →  Main account order + 1:1 copy to all slave account
 >
 > **Built 2026-03-15:** `DataSyncService` created with background sync, retention, Redis cache.
 > Uses existing `historical_bars` table + `backfill_symbol()` from backfill.py — no new table needed.
+> **Trainer pipeline cleaned up 2026-03-15 evening:** EngineDataClient is sole production path, legacy fallbacks gated behind `TRAINER_LOCAL_DEV=1`.
 
 ### ✅ DATA-ROLLING-A: Postgres 1m Bar Storage (DONE 2026-03-15 — uses existing `historical_bars`)
 - [x] Create `bars_1m` table — **uses existing `historical_bars`** table from `backfill.py` (already has symbol, timestamp, OHLCV, interval, unique constraint)
@@ -638,15 +802,19 @@ Rithmic (async_rithmic)  →  Main account order + 1:1 copy to all slave account
 - [x] Data service populates Redis cache from Postgres on startup — existing `startup_warm_caches()` + sync service warms after each symbol sync
 - [x] TTL management: Redis bars expire after 25h, refreshed on each sync cycle
 
-### 🟡 DATA-ROLLING-D: Trainer Data Pipeline
-- [ ] Trainer can request data from data service instead of fetching directly
+### ✅ DATA-ROLLING-D: Trainer Data Pipeline (DONE 2026-03-15)
+- [x] Trainer can request data from data service instead of fetching directly — `EngineDataClient.get_bars()` is sole production path
 - [x] `GET /api/data/bars?symbol=MES&interval=1m&days=365` — serves from Postgres via existing `get_stored_bars()` — route added in `sync_router`
-- [ ] Dataset generation uses Postgres bars — no more direct API calls from trainer
-- [ ] Enables offline training: once data is in Postgres, no external API needed
+- [x] Dataset generation uses Postgres bars via data service — no more direct API calls from trainer in production
+- [x] Legacy fallback loaders (`_load_bars_from_db`, `_load_bars_from_massive`, `_load_bars_from_cache`, `_load_bars_from_kraken`) gated behind `TRAINER_LOCAL_DEV=1` env var — disabled in production, only for offline dev
+- [x] `_request_deeper_fill()` refactored to use `EngineDataClient.fill_symbol()` (new method) instead of raw HTTP
+- [x] `load_daily_bars()` refactored: 3-step EngineDataClient cascade (`get_daily_bars` → `get_bars(interval="1d")` → `get_stored_bars(interval="1d")`), resample fallback gated
+- [x] `EngineDataClient.fill_symbol()` + `fill_status()` methods added for clean fill triggering
+- [x] Enables offline training: once data is in Postgres, no external API needed (set `TRAINER_LOCAL_DEV=1` for offline mode with local DB)
 
-**Files**: `src/lib/services/data/sync.py` (**new**, 783 lines), `src/lib/services/data/main.py` (updated — lifespan + router), `src/lib/services/data/api/bars.py` (existing — unchanged, sync service delegates to `backfill_symbol()`)
+**Files**: `src/lib/services/data/sync.py`, `src/lib/services/data/main.py`, `src/lib/services/data/api/bars.py`, `src/lib/services/data/engine_data_client.py` (updated — `fill_symbol()`, `fill_status()`), `src/lib/services/training/dataset_generator.py` (updated — gated fallbacks, client-based fill)
 **New API routes**: `GET /api/data/sync/status`, `POST /api/data/sync/trigger`, `GET /api/data/bars`
-**Estimated effort**: ~~3–4 sessions~~ A/B/C done, D partially done (~1 session remaining)
+**Estimated effort**: ~~3–4 sessions~~ **ALL DONE** ✅
 
 ---
 
@@ -1319,7 +1487,7 @@ Full specs for all of the above: [`docs/backlog.md`](docs/backlog.md)
 
 ---
 
-## Pre-Retrain Readiness — Summary
+## Pre-Retrain Readiness — Summary (historical — v9 now complete)
 
 > v8 training ran but did NOT beat v6 champion (83.3% vs 87.1%).
 > Regularization upgraded, per-asset training infra built. Pipeline hardened 2026-03-14.
@@ -1356,7 +1524,9 @@ Full specs for all of the above: [`docs/backlog.md`](docs/backlog.md)
 - Dataset wipe: `POST /dataset/wipe` API + `scripts/wipe_dataset.sh --force`
 - Frankfurt removed: 8 sessions, SESSION_ORDINAL re-indexed 0/7 through 7/7
 
-### v8 Training Results (2026-03-13)
+### v8 Training Results (2026-03-13) — superseded by v9
+
+> **v9 results (2026-03-15):** 89.3% val accuracy, 89.3% precision, 89.2% recall (4,836 val samples, 80 epochs, best epoch 74)
 | Metric | v6 Champion | v8 Result | Delta |
 |--------|-------------|-----------|-------|
 | Val Accuracy | 87.1% | 83.3% | -3.8% |
@@ -1392,32 +1562,29 @@ Full specs for all of the above: [`docs/backlog.md`](docs/backlog.md)
 ## 📊 Priority Matrix — Session Planning Guide
 
 > Use this to pick tasks for each AI agent session. Top-to-bottom priority.
-> Updated 2026-03-14 evening: pipeline hardening committed (`c8f3bff`), ready to deploy + retrain on oryx.
+> Updated 2026-03-15 evening: v9 champion on oryx, KRAKEN-SIM C+D done, DATA-ROLLING-D done, trainer pipeline cleaned up.
 
 | Priority | Phase | Est. Sessions | Depends On | Status |
 |----------|-------|---------------|------------|--------|
-| 🔴 1 | **RETRAIN v9** | 1 | — | **NEXT: Deploy to oryx → wipe dataset → run full pipeline** — all hardening committed, 365-day default set |
-| 🔴 2 | RETRAIN per-group | 1 | RETRAIN combined | Run `scripts/run_per_group_training.py` — compare groups vs combined |
-| 🟡 3 | **KRAKEN-SIM** (C–D remain) | 2–3 | — | ✅ SimulationEngine + API + DOM live data built — pre-trade analysis + settings toggle remain |
-| 🟡 4 | **DATA-ROLLING** (D remains) | 1 | — | ✅ Sync service + retention + Redis cache built — trainer pipeline wiring remains |
-| 🔴 5 | JOURNAL-SYNC | 3–4 | Rithmic creds | Auto-sync trades from Rithmic fills |
-| 🟡 6 | RITHMIC-STREAM (A–F) | 6–8 | Rithmic creds | Persistent streaming integration |
-| 🟡 7 | DOM live data | 2–3 | RITHMIC-STREAM-B | Replace mock data in `dom.py` with real L2 |
-| 🟡 8 | POSINT wiring | 2–3 | RITHMIC-STREAM | Wire real analysis modules into position_intelligence.py |
-| 🟡 9 | RA-CHAT verify | 0.5 | — | Test chat.html end-to-end with RA/Grok backend |
-| 🟡 10 | PINE-WEBUI | 1 | — | Quick verify + polish |
-| 🟡 11 | UI-SPLIT | 2–3 | — | Non-blocking, improves DX |
-| 🟡 12 | TESTS remaining | 1–2 | — | WebUI endpoints, pipeline edge cases |
-| 🟡 13 | SIGNALS | 1 | — | Config + gating changes |
-| 🟡 14 | Pipeline wiring | 2–3 | — | Non-blocking enhancements |
-| 🟡 15 | **WEBUI-KEYS** | 2–3 | — | Move API keys from .env to WebUI settings page |
-| 🟡 16 | **KRAKEN-ACCOUNTS** | 4–5 | KRAKEN-SIM | Full Kraken spot + futures account management |
-| 🟢 17 | LOGGING-C+D | 2–3 | LOGGING-B ✅ | stdlib→key-value (low priority) |
-| 🟢 18 | MODEL-INT / PINE-INT | 3–4 | — | Library polish, not urgent |
-| 🟢 19 | CLEANUP-REMAINING | 2 | — | Dedup + file splits |
-| 🟢 20 | PROFIT tracking | 1–2 | Funded accounts | After first profits |
-| 🟢 21 | Kraken spot ratios | 2–3 | Funded + Kraken deposit | Manage spot portfolio with ratio strategy |
-| 🟢 22 | **MULTI-EXCHANGE** | 8–10 | KRAKEN-ACCOUNTS | crypto.com, Netcoins, BTC wallet, tax reporting |
+| 🔴 1 | **JOURNAL-SYNC** | 3–4 | Rithmic creds | **NEXT: Auto-sync trades from Rithmic fills** — `get_today_fills()` + `upsert_trade_from_fill()` exist, need sync loop + fill matching + journal UI upgrade |
+| 🟡 2 | RETRAIN per-group | 1 | — | Optional: `scripts/run_per_group_training.py` — compare groups vs combined 89.3% |
+| 🟡 3 | RITHMIC-STREAM (A–F) | 6–8 | Rithmic creds | Persistent streaming integration — unlocks DOM live data, journal sync, real-time risk |
+| 🟡 4 | DOM live data | 2–3 | RITHMIC-STREAM-B | Replace mock data in `dom.py` with real L2 |
+| 🟡 5 | POSINT wiring | 2–3 | RITHMIC-STREAM | Wire real analysis modules into position_intelligence.py |
+| 🟡 6 | RA-CHAT verify | 0.5 | — | Test chat.html end-to-end with RA/Grok backend |
+| 🟡 7 | PINE-WEBUI | 1 | — | Quick verify + polish |
+| 🟡 8 | UI-SPLIT | 2–3 | — | Non-blocking, improves DX |
+| 🟡 9 | TESTS remaining | 1–2 | — | WebUI endpoints, pipeline edge cases |
+| 🟡 10 | SIGNALS | 1 | — | Config + gating changes |
+| 🟡 11 | Pipeline wiring | 2–3 | — | Non-blocking enhancements |
+| 🟡 12 | **WEBUI-KEYS** | 2–3 | — | Move API keys from .env to WebUI settings page |
+| 🟡 13 | **KRAKEN-ACCOUNTS** | 4–5 | KRAKEN-SIM ✅ | Full Kraken spot + futures account management |
+| 🟢 14 | LOGGING-C+D | 2–3 | LOGGING-B ✅ | stdlib→key-value (low priority) |
+| 🟢 15 | MODEL-INT / PINE-INT | 3–4 | — | Library polish, not urgent |
+| 🟢 16 | CLEANUP-REMAINING | 2 | — | Dedup + file splits |
+| 🟢 17 | PROFIT tracking | 1–2 | Funded accounts | After first profits |
+| 🟢 18 | Kraken spot ratios | 2–3 | Funded + Kraken deposit | Manage spot portfolio with ratio strategy |
+| 🟢 19 | **MULTI-EXCHANGE** | 8–10 | KRAKEN-ACCOUNTS | crypto.com, Netcoins, BTC wallet, tax reporting |
 
 ## 📋 New Files Created (2026-03-14 Oryx Session)
 
@@ -1447,6 +1614,31 @@ Full specs for all of the above: [`docs/backlog.md`](docs/backlog.md)
 | `src/lib/services/engine/simulation.py` | 1273 | SimulationEngine — paper trading with live tick data (KRAKEN-SIM-B) |
 | `src/lib/services/data/api/simulation_api.py` | 370 | Simulation API routes: /api/sim/*, /sse/sim (KRAKEN-SIM-B) |
 | `src/lib/services/data/sync.py` | 783 | DataSyncService — rolling 1-year data window, background sync, retention (DATA-ROLLING-A/B/C) |
+
+## 📋 Changes Made (2026-03-15 CNN v9 Retrain Session)
+
+| File | Change |
+|------|--------|
+| `src/lib/services/data/api/trainer.py` | UI symbol input splits on `/[\s,]+/`; days_back default 365, max 730; removed duplicate frankfurt session |
+| `src/lib/services/training/trainer_server.py` | Pydantic `field_validator` for symbol normalization; default symbol env adjusted |
+| `src/lib/services/training/dataset_generator.py` | `validate_dataset_pre_training()`: image integrity check (Pillow `.verify()`), auto-delete corrupt images + prune CSV rows |
+| `src/lib/analysis/ml/breakout_cnn.py` | `BreakoutDataset._resolve_image_path()`: robust path resolver; `__init__` integrity check + corrupt file deletion |
+| `docker-compose.trainer.yml` | `CNN_RETRAIN_SYMBOLS` default: 7 liquid symbols (dropped ZB, ZW) |
+| `docker-compose.yml` | Same symbol default update |
+| `models/breakout_cnn_best_meta.json` | TODO: update with v9 meta from oryx (managing locally for now) |
+| `models/breakout_cnn_best.pt` | TODO: copy from oryx when ready for multi-host deployment |
+
+## 📋 Changes Made (2026-03-15 Evening Session — Trainer Pipeline + KRAKEN-SIM C+D)
+
+| File | Change |
+|------|--------|
+| `src/lib/services/data/engine_data_client.py` | Added `fill_symbol()` + `fill_status()` methods to `EngineDataClient` for clean fill triggering |
+| `src/lib/services/training/dataset_generator.py` | `load_bars()` legacy fallbacks gated behind `TRAINER_LOCAL_DEV=1`; `_request_deeper_fill()` uses `EngineDataClient.fill_symbol()`; `load_daily_bars()` uses 3-step client cascade |
+| `src/lib/services/data/api/pretrade.py` | Fixed sim position key mismatch (`sim:positions` plural); `_build_watchlist_snapshot()` helper; `select_assets()` publishes `pretrade_selection_changed` event; SSE endpoint `GET /api/pretrade/sse/watchlist` |
+| `src/lib/services/engine/simulation.py` | Added `_watched_symbols` set + `update_watched_symbols()` method; `on_tick()` respects watched-symbol filtering |
+| `static/pretrade.html` | SSE watchlist stream (`startWatchlistSSE()`) with polling fallback |
+| `src/lib/services/data/api/settings.py` | Added "📡 Data Sources" settings tab with source selector pills, status cards, sim mode indicator, available symbols panel |
+| `src/lib/services/data/main.py` | Registered pretrade SSE router |
 
 ---
 

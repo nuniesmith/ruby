@@ -1753,7 +1753,41 @@ def _handle_generate_chart_dataset(engine) -> None:
     logger.info("⏭️  Chart dataset generation skipped — use trainer service (POST /train)")
 
 
-def _handle_train_breakout_cnn(engine) -> None:
+def _handle_journal_sync() -> None:
+    """Pull today's Rithmic fills and upsert matched round-trip trades into trades_v2.
+
+    Gated by ``RITHMIC_JOURNAL_SYNC=1`` env var — returns immediately if not set.
+    The sync runs in a fresh event loop so it is safe to call from the
+    synchronous engine main loop.
+    """
+    import os
+
+    if os.getenv("RITHMIC_JOURNAL_SYNC", "0") != "1":
+        logger.debug("journal_sync: RITHMIC_JOURNAL_SYNC not set — skipping")
+        return
+
+    try:
+        from lib.services.engine.journal_sync import run_journal_sync_sync
+
+        result = run_journal_sync_sync()
+        if result.get("status") == "ok":
+            logger.info(
+                "journal_sync: fills=%d matched=%d written=%d",
+                result.get("fills_retrieved", 0),
+                result.get("trades_matched", 0),
+                result.get("trades_written", 0),
+            )
+        else:
+            logger.warning(
+                "journal_sync: status=%s errors=%s",
+                result.get("status"),
+                result.get("errors"),
+            )
+    except Exception as exc:
+        logger.error("journal_sync: handler error: %s", exc, exc_info=True)
+
+
+def _handle_train_breakout_cnn(engine):
     """No-op — CNN training runs on the dedicated GPU trainer service.
 
     The trainer server (lib.services.training.trainer_server) handles the full
@@ -2541,6 +2575,7 @@ def main():
         ActionType.GENERATE_CHART_DATASET: lambda: _handle_generate_chart_dataset(engine),
         ActionType.TRAIN_BREAKOUT_CNN: lambda: _handle_train_breakout_cnn(engine),
         ActionType.DAILY_REPORT: lambda: _handle_daily_report(engine),
+        ActionType.JOURNAL_SYNC: lambda: _handle_journal_sync(),
     }
 
     logger.info("=" * 60)

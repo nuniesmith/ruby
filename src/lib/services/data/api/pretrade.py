@@ -20,18 +20,25 @@ Usage:
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import json
 import logging
+import time
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
 
 logger = logging.getLogger("api.pretrade")
 
 router = APIRouter(prefix="/api/pretrade", tags=["Pre-Trade Analysis"])
+sse_router = APIRouter(tags=["pretrade-sse"])
 
 # ---------------------------------------------------------------------------
 # Focus futures symbols — the 9 micro contracts the system primarily trades
@@ -535,7 +542,8 @@ async def select_assets(body: SelectRequest, request: Request) -> dict:
     """Mark symbols as selected for monitoring/trading.
 
     Stores selected symbols in a Redis set with 24-hour TTL.
-    Replaces any previous selection.
+    Replaces any previous selection.  Also publishes an event so the
+    SimulationEngine (and SSE listeners) can react immediately.
     """
     redis = _get_redis(request)
 
@@ -554,6 +562,21 @@ async def select_assets(body: SelectRequest, request: Request) -> dict:
             pipe.sadd(_SELECTED_KEY, *body.symbols)
             pipe.expire(_SELECTED_KEY, _SELECTED_TTL)
         pipe.execute()
+
+        # Publish selection event so SimulationEngine and SSE streams react
+        try:
+            redis.publish(
+                "futures:events",
+                json.dumps(
+                    {
+                        "event": "pretrade_selection_changed",
+                        "symbols": body.symbols,
+                        "timestamp": datetime.now(tz=UTC).isoformat(),
+                    }
+                ),
+            )
+        except Exception as pub_exc:
+            logger.warning("Failed to publish pretrade selection event: %s", pub_exc)
 
         logger.info("Pre-trade selection updated: %s", body.symbols)
         return {
@@ -609,6 +632,15 @@ async def watchlist(request: Request) -> dict:
     if redis is None:
         return {"items": [], "count": 0}
 
+    return _build_watchlist_snapshot(redis)
+
+
+def _build_watchlist_snapshot(redis: Any) -> dict:
+    """Build a watchlist snapshot dict from Redis state.
+
+    Factored out so both the REST endpoint and the SSE generator can
+    reuse the same logic without duplicating code.
+    """
     # Get selected symbols
     try:
         members = redis.smembers(_SELECTED_KEY)
@@ -618,6 +650,23 @@ async def watchlist(request: Request) -> dict:
 
     if not selected:
         return {"items": [], "count": 0, "message": "No assets selected"}
+
+    # ── Load sim positions from the canonical "sim:positions" key ──
+    # SimulationEngine._publish_state() writes a JSON list to "sim:positions".
+    sim_positions_by_symbol: dict[str, dict] = {}
+    try:
+        sim_raw = redis.get("sim:positions")
+        if sim_raw:
+            if isinstance(sim_raw, bytes):
+                sim_raw = sim_raw.decode("utf-8", errors="replace")
+            sim_list = json.loads(sim_raw)
+            if isinstance(sim_list, list):
+                for pos in sim_list:
+                    sym = pos.get("symbol")
+                    if sym:
+                        sim_positions_by_symbol[sym] = pos
+    except Exception:
+        pass
 
     items: list[dict[str, Any]] = []
 
@@ -661,19 +710,15 @@ async def watchlist(request: Request) -> dict:
             }
             item["last_analyzed"] = cached.get("analyzed_at")
 
-        # Read sim position if available
-        try:
-            sim_raw = redis.get(f"sim:position:{symbol}")
-            if sim_raw:
-                sim_data = json.loads(sim_raw.decode() if isinstance(sim_raw, bytes) else sim_raw)
-                item["sim_position"] = {
-                    "side": sim_data.get("side"),
-                    "qty": sim_data.get("qty") or sim_data.get("contracts"),
-                    "entry": sim_data.get("entry") or sim_data.get("entry_price"),
-                    "unrealized_pnl": sim_data.get("unrealized_pnl") or sim_data.get("pnl"),
-                }
-        except Exception:
-            pass
+        # Read sim position from the parsed sim:positions list
+        pos_data = sim_positions_by_symbol.get(symbol)
+        if pos_data:
+            item["sim_position"] = {
+                "side": pos_data.get("side"),
+                "qty": pos_data.get("qty") or pos_data.get("contracts"),
+                "entry": pos_data.get("entry_price") or pos_data.get("entry"),
+                "unrealized_pnl": pos_data.get("unrealized_pnl") or pos_data.get("pnl"),
+            }
 
         items.append(item)
 
@@ -682,3 +727,142 @@ async def watchlist(request: Request) -> dict:
         "count": len(items),
         "timestamp": datetime.now(tz=UTC).isoformat(),
     }
+
+
+# ---------------------------------------------------------------------------
+# SSE — GET /api/pretrade/sse/watchlist
+# ---------------------------------------------------------------------------
+
+_WATCHLIST_RELEVANT_EVENTS = frozenset(
+    {
+        "kraken_bar",
+        "kraken_tick",
+        "sim_fill",
+        "sim_pnl",
+        "pretrade_selection_changed",
+    }
+)
+
+
+def _pretrade_redis_pubsub():
+    """Return a Redis pub/sub object subscribed to ``futures:events``, or *None*."""
+    try:
+        from lib.core.cache import REDIS_AVAILABLE, _r
+
+        if not REDIS_AVAILABLE or _r is None:
+            return None
+        ps = _r.pubsub()
+        ps.subscribe("futures:events")
+        return ps
+    except Exception:
+        return None
+
+
+async def _watchlist_sse_generator(
+    request: Request,
+) -> AsyncGenerator[str]:
+    """Yield SSE-formatted watchlist snapshots.
+
+    * Every ~2 seconds a full watchlist snapshot is emitted.
+    * On ``sim_fill`` or ``pretrade_selection_changed`` events an
+      immediate snapshot is pushed so the UI updates without delay.
+    * A heartbeat comment is sent every 15 s to keep proxies alive.
+    """
+    redis = _get_redis(request)
+    pubsub = _pretrade_redis_pubsub()
+    use_redis = pubsub is not None
+
+    logger.info("pretrade watchlist SSE stream started (redis=%s)", use_redis)
+
+    last_snapshot = 0.0
+    last_heartbeat = time.monotonic()
+
+    _SNAPSHOT_INTERVAL_S = 2.0
+    _HEARTBEAT_INTERVAL_S = 15.0
+    _POLL_INTERVAL_S = 0.1
+
+    try:
+        while True:
+            if await request.is_disconnected():
+                logger.info("pretrade watchlist SSE client disconnected")
+                break
+
+            now = time.monotonic()
+            emit_now = False
+
+            # Drain Redis pub/sub messages
+            if use_redis and pubsub is not None:
+                try:
+                    msg = pubsub.get_message(ignore_subscribe_messages=True, timeout=0.0)
+                    if msg and msg.get("type") == "message":
+                        raw = msg.get("data", b"")
+                        if isinstance(raw, bytes):
+                            raw = raw.decode("utf-8", errors="replace")
+                        try:
+                            data = json.loads(raw)
+                            event_type = data.get("event", "")
+                            if event_type in _WATCHLIST_RELEVANT_EVENTS:
+                                # Forward the raw event for clients that want granular updates
+                                yield f"event: {event_type}\ndata: {raw}\n\n"
+                            # Trigger immediate snapshot on high-priority events
+                            if event_type in ("sim_fill", "pretrade_selection_changed"):
+                                emit_now = True
+                        except (json.JSONDecodeError, TypeError):
+                            pass
+                except Exception:
+                    use_redis = False
+                    pubsub = None
+
+            # Periodic (or immediate) watchlist snapshot
+            if redis is not None and (emit_now or now - last_snapshot >= _SNAPSHOT_INTERVAL_S):
+                try:
+                    snapshot = _build_watchlist_snapshot(redis)
+                    payload = json.dumps(snapshot, default=str)
+                    yield f"event: watchlist\ndata: {payload}\n\n"
+                except Exception:
+                    pass
+                last_snapshot = now
+
+            # Heartbeat
+            if now - last_heartbeat >= _HEARTBEAT_INTERVAL_S:
+                yield ": heartbeat\n\n"
+                last_heartbeat = now
+
+            await asyncio.sleep(_POLL_INTERVAL_S)
+
+    except asyncio.CancelledError:
+        logger.info("pretrade watchlist SSE cancelled")
+    except Exception:
+        logger.exception("pretrade watchlist SSE error")
+    finally:
+        if pubsub is not None:
+            with contextlib.suppress(Exception):
+                pubsub.unsubscribe()
+                pubsub.close()
+        logger.info("pretrade watchlist SSE stream closed")
+
+
+@sse_router.get("/api/pretrade/sse/watchlist")
+async def sse_watchlist(request: Request) -> StreamingResponse:
+    """SSE endpoint streaming real-time watchlist updates.
+
+    Connect via ``EventSource("/api/pretrade/sse/watchlist")`` in the
+    browser.  Events:
+
+    - ``watchlist`` — full watchlist snapshot (every ~2 s, or immediately
+      on fills / selection changes)
+    - ``sim_fill``, ``pretrade_selection_changed``, etc. — raw event
+      forwarded from Redis for granular handling
+
+    A heartbeat comment is sent every 15 s.
+    """
+    logger.info("pretrade watchlist SSE connection opened")
+    return StreamingResponse(
+        _watchlist_sse_generator(request),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )

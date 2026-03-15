@@ -1055,14 +1055,49 @@ if _TORCH_AVAILABLE:
             dropped_missing = int((~exists_mask).sum())  # type: ignore[arg-type]
             self.df = self.df[exists_mask]
 
-            # 3. Reset index so iloc is contiguous
+            # 3. Integrity check — verify images can actually be opened.
+            #    Corrupt files (truncated writes, zero-byte, partial PNGs)
+            #    cause repeated warnings every epoch in __getitem__.  We
+            #    catch them here, delete them from disk, and drop the rows.
+            dropped_corrupt = 0
+            if len(self.df) > 0:
+
+                def _is_readable(p: str) -> bool:
+                    resolved = self._resolve_image_path(str(p))
+                    if not os.path.isfile(resolved):
+                        return False
+                    try:
+                        with Image.open(resolved) as img:
+                            img.verify()
+                        return True
+                    except Exception:
+                        return False
+
+                readable_mask = self.df["image_path"].apply(_is_readable)  # type: ignore[union-attr]
+                corrupt_mask = ~readable_mask
+                dropped_corrupt = int(corrupt_mask.sum())
+
+                if dropped_corrupt > 0:
+                    # Delete corrupt files from disk so they don't pollute future runs
+                    for bad_path in self.df.loc[corrupt_mask, "image_path"]:
+                        resolved = self._resolve_image_path(str(bad_path))
+                        if os.path.isfile(resolved):
+                            try:
+                                os.remove(resolved)
+                                logger.info("Deleted corrupt image: %s", resolved)
+                            except OSError as rm_err:
+                                logger.warning("Could not delete corrupt image %s: %s", resolved, rm_err)
+                    self.df = self.df[readable_mask]
+
+            # 4. Reset index so iloc is contiguous
             self.df = self.df.reset_index(drop=True)  # type: ignore[union-attr]
 
-            if dropped_empty > 0 or dropped_missing > 0:
+            if dropped_empty > 0 or dropped_missing > 0 or dropped_corrupt > 0:
                 logger.warning(
-                    "BreakoutDataset: dropped %d empty-path + %d missing-file rows from %s (kept %d / %d)",
+                    "BreakoutDataset: dropped %d empty-path + %d missing-file + %d corrupt-image rows from %s (kept %d / %d)",
                     dropped_empty,
                     dropped_missing,
+                    dropped_corrupt,
                     csv_path,
                     len(self.df),
                     initial_count,

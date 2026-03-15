@@ -567,8 +567,12 @@ def _load_bars_from_engine(symbol: str, days: int = 90) -> pd.DataFrame | None:
 def _request_deeper_fill(symbol: str, days: int) -> None:
     """Ask the engine to run a blocking deeper fill for *symbol*.
 
-    Calls ``POST /bars/{symbol}/fill`` with the requested ``days_back`` so
-    the engine fetches further back in history from Massive / yfinance.
+    Primary path: ``EngineDataClient.fill_symbol()`` which POSTs to
+    ``/bars/{symbol}/fill`` on the data service.
+
+    Legacy fallback (raw HTTP): only used when ``TRAINER_LOCAL_DEV=1`` and
+    the EngineDataClient is unavailable.
+
     The call is best-effort — any network or engine error is logged at DEBUG
     level and silently swallowed so callers can always continue.
 
@@ -576,6 +580,40 @@ def _request_deeper_fill(symbol: str, days: int) -> None:
     bring under-stocked symbols up to the minimum bar threshold before
     deciding whether to drop them from the dataset run.
     """
+    # --- Primary path: EngineDataClient ----------------------------------
+    try:
+        from lib.services.data.engine_data_client import get_client
+
+        client = get_client()
+        result = client.fill_symbol(
+            symbol,
+            days_back=days,
+            interval="1m",
+            timeout=max(_ENGINE_BARS_TIMEOUT * 4, 240),
+        )
+        if result is not None:
+            bars_added = result.get("bars_added", 0)
+            logger.info(
+                "  Deeper fill for %s complete: +%d bars (total: %d)",
+                symbol,
+                bars_added,
+                result.get("bars_after", "?"),
+            )
+            return
+        # fill_symbol returned None — client logged the reason at DEBUG.
+        logger.debug("Deeper fill via EngineDataClient returned None for %s", symbol)
+        return
+    except Exception as exc:
+        logger.debug("EngineDataClient fill_symbol failed for %s: %s", symbol, exc)
+
+    # --- Legacy raw-HTTP fallback (local dev only) -----------------------
+    if os.getenv("TRAINER_LOCAL_DEV", "0") != "1":
+        logger.debug(
+            "Deeper fill: EngineDataClient unavailable and TRAINER_LOCAL_DEV!=1 — skipping raw HTTP fallback for %s",
+            symbol,
+        )
+        return
+
     try:
         import requests as _requests
     except ImportError:
@@ -592,15 +630,13 @@ def _request_deeper_fill(symbol: str, days: int) -> None:
             url,
             json={"days_back": days, "interval": "1m"},
             headers=headers,
-            # Filling can be slow for large windows — use a generous timeout.
-            # The /fill endpoint blocks until complete.
             timeout=max(_ENGINE_BARS_TIMEOUT * 4, 240),
         )
         if resp.status_code == 200:
             result = resp.json()
             bars_added = result.get("bars_added", 0)
             logger.info(
-                "  Deeper fill for %s complete: +%d bars (total: %d)",
+                "  Deeper fill for %s complete (legacy path): +%d bars (total: %d)",
                 symbol,
                 bars_added,
                 result.get("bars_after", "?"),
@@ -1042,6 +1078,24 @@ def load_bars(
     # Only runs when the EngineDataClient raised an exception (connection
     # refused, DNS failure, import error, etc.).  Keeps the trainer usable
     # in local dev without a running data service.
+    #
+    # Gated behind TRAINER_LOCAL_DEV=1: the GPU trainer machine has no
+    # local DB, no Redis, and no API keys — these legacy loaders would only
+    # produce log noise.  In production the EngineDataClient path above is
+    # the sole source of truth.
+    if os.getenv("TRAINER_LOCAL_DEV", "0") != "1":
+        logger.error(
+            "load_bars: EngineDataClient unavailable for %s and TRAINER_LOCAL_DEV!=1 "
+            "— legacy fallback loaders are disabled. Ensure the data service is "
+            "reachable, or set TRAINER_LOCAL_DEV=1 to enable offline fallbacks.",
+            symbol,
+        )
+        return None
+
+    logger.info(
+        "load_bars: EngineDataClient unavailable for %s — using legacy fallback loaders (TRAINER_LOCAL_DEV=1)",
+        symbol,
+    )
     _is_kraken = _is_kraken_symbol(symbol)
 
     if _is_kraken:
@@ -1093,17 +1147,67 @@ def load_daily_bars(
             pass
 
     # Primary: engine daily bars endpoint
+    _engine_reachable = False
     try:
         from lib.services.data.engine_data_client import get_client
 
         client = get_client()
         df = client.get_daily_bars(symbol, days_back=365)
         if df is not None and not df.empty:
+            logger.debug("load_daily_bars: %d daily bars for %s via get_daily_bars()", len(df), symbol)
             return df
+
+        # get_daily_bars() returned nothing — try get_bars with interval="1d"
+        # which routes through the standard /bars/{symbol} endpoint.
+        df = client.get_bars(symbol, interval="1d", days_back=365)
+        if df is not None and not df.empty:
+            logger.debug("load_daily_bars: %d daily bars for %s via get_bars(interval='1d')", len(df), symbol)
+            return df
+
+        # Last EngineDataClient attempt: Postgres-backed stored bars at 1d
+        try:
+            df = client.get_stored_bars(symbol, interval="1d", days_back=365)
+            if df is not None and not df.empty:
+                logger.debug(
+                    "load_daily_bars: %d daily bars for %s via get_stored_bars(interval='1d')", len(df), symbol
+                )
+                return df
+        except Exception as exc:
+            logger.debug("get_stored_bars(1d) failed for %s: %s", symbol, exc)
+
+        # Check if the engine is actually up (to decide whether to fall through)
+        if hasattr(client, "is_available") and client.is_available():
+            _engine_reachable = True
+
     except Exception as exc:
         logger.debug("Daily bars via EngineDataClient failed for %s: %s", symbol, exc)
 
-    # Fallback: resample from 1-minute data
+    # If engine is reachable but simply has no daily data, skip local
+    # fallbacks in production (same logic as load_bars).
+    if _engine_reachable:
+        logger.debug(
+            "load_daily_bars: engine reachable but returned no daily bars for %s — skipping local fallbacks",
+            symbol,
+        )
+        return None
+
+    # --- Fallback: resample from 1-minute data ---------------------------
+    # Gated behind TRAINER_LOCAL_DEV=1: the GPU trainer machine should only
+    # use EngineDataClient paths.  The resample fallback calls load_bars()
+    # which itself may trigger legacy loaders that are unavailable.
+    if os.getenv("TRAINER_LOCAL_DEV", "0") != "1":
+        logger.error(
+            "load_daily_bars: EngineDataClient unavailable for %s and TRAINER_LOCAL_DEV!=1 "
+            "— resample fallback is disabled. Ensure the data service is reachable, "
+            "or set TRAINER_LOCAL_DEV=1 to enable offline fallbacks.",
+            symbol,
+        )
+        return None
+
+    logger.info(
+        "load_daily_bars: EngineDataClient unavailable for %s — trying resample fallback (TRAINER_LOCAL_DEV=1)",
+        symbol,
+    )
     bars_1m = load_bars(symbol, source=source, csv_dir=csv_dir, days=90)
     if bars_1m is not None and len(bars_1m) > 100:
         try:
@@ -3301,6 +3405,77 @@ def validate_dataset_pre_training(
 
     report["missing_images"] = missing_count
     report["missing_per_symbol"] = missing_per_symbol
+
+    # ── 7b. Image integrity check — detect corrupt / unreadable images ────
+    # Files that exist on disk but cannot be opened by Pillow (truncated
+    # writes, zero-byte files, partial PNGs) cause repeated warnings during
+    # training.  We catch them here, delete the bad file, and drop the row.
+    corrupt_count = 0
+    corrupt_deleted: list[str] = []
+    if check_images and "image_path" in df.columns and len(df) > 0:
+        from PIL import Image as _PILImage
+
+        def _is_readable(p: str) -> bool:
+            p = str(p).strip()
+            if not p or not os.path.isfile(p):
+                return False  # already handled by step 7
+            try:
+                with _PILImage.open(p) as img:
+                    img.verify()  # lightweight check — validates headers
+                return True
+            except Exception:
+                return False
+
+        readable_mask = df["image_path"].apply(_is_readable)
+        corrupt_count = int((~readable_mask).sum())
+
+        if corrupt_count > 0:
+            corrupt_paths = df.loc[~readable_mask, "image_path"].tolist()
+            logger.warning(
+                "Pre-training validation: found %d corrupt/unreadable image(s)",
+                corrupt_count,
+            )
+            if auto_fix:
+                # Delete the bad files from disk
+                for bad_path in corrupt_paths:
+                    bad_path_str = str(bad_path).strip()
+                    if os.path.isfile(bad_path_str):
+                        try:
+                            os.remove(bad_path_str)
+                            corrupt_deleted.append(os.path.basename(bad_path_str))
+                            logger.info(
+                                "Pre-training validation: deleted corrupt image %s",
+                                bad_path_str,
+                            )
+                        except OSError as rm_err:
+                            logger.warning(
+                                "Pre-training validation: could not delete %s — %s",
+                                bad_path_str,
+                                rm_err,
+                            )
+                # Drop the rows from the dataframe
+                before = len(df)
+                df = df[readable_mask].reset_index(drop=True)
+                removed = before - len(df)
+                report["fixes_applied"].append(
+                    f"Deleted {len(corrupt_deleted)} corrupt image(s) from disk and removed {removed} CSV row(s): "
+                    + ", ".join(corrupt_deleted[:10])
+                    + ("..." if len(corrupt_deleted) > 10 else "")
+                )
+                logger.info(
+                    "Pre-training validation: purged %d corrupt image(s) — %d deleted from disk, %d rows removed from CSV",
+                    corrupt_count,
+                    len(corrupt_deleted),
+                    removed,
+                )
+            else:
+                report["warnings"].append(
+                    f"{corrupt_count} image(s) exist on disk but cannot be opened (corrupt/truncated) — "
+                    f"pass auto_fix=True to delete them"
+                )
+
+    report["corrupt_images"] = corrupt_count
+    report["corrupt_deleted"] = corrupt_deleted
 
     # ── 8. Row count gate ─────────────────────────────────────────────────
     report["total_rows"] = len(df)

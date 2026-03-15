@@ -268,6 +268,9 @@ class SimulationEngine:
         self._running: bool = False
         self._started_at: float | None = None
 
+        # ── Pretrade watched symbols (empty = process all ticks) ─────────
+        self._watched_symbols: set[str] = set()
+
         logger.info(
             "SimulationEngine created",
             extra={
@@ -714,6 +717,30 @@ class SimulationEngine:
     # Tick processing (callback from Kraken / Rithmic feed)
     # =====================================================================
 
+    def update_watched_symbols(self, symbols: list[str]) -> None:
+        """Update the set of symbols the engine should actively process.
+
+        When the pretrade selection changes, this is called so that
+        ``on_tick`` can skip symbols the user is not watching.
+
+        If *symbols* is empty the filter is cleared and **all** ticks
+        are processed (original behaviour).
+
+        Args:
+            symbols: List of internal tickers, e.g.
+                ``["KRAKEN:XBTUSD", "MES=F"]``.
+        """
+        with self._lock:
+            if symbols:
+                self._watched_symbols = set(symbols)
+                logger.info(
+                    "watched symbols updated: %s",
+                    sorted(self._watched_symbols),
+                )
+            else:
+                self._watched_symbols.clear()
+                logger.info("watched symbols cleared — processing all ticks")
+
     def on_tick(self, internal_ticker: str, trade_data: dict[str, Any]) -> None:
         """Process a new tick from the live data feed.
 
@@ -726,6 +753,11 @@ class SimulationEngine:
         4. Check stop-loss / take-profit levels.
         5. Publish updated state to Redis.
 
+        If ``_watched_symbols`` is non-empty, only ticks for symbols in
+        that set (or symbols with an existing open position / pending
+        order) are fully processed.  Ticks for other symbols still
+        update the price cache but skip the heavier order/PnL logic.
+
         Args:
             internal_ticker: Internal symbol, e.g. ``"KRAKEN:XBTUSD"``.
             trade_data: Dict with at minimum ``"price"`` (float).
@@ -733,6 +765,17 @@ class SimulationEngine:
         price = float(trade_data.get("price", 0))
         if price <= 0:
             return
+
+        # Fast-path filter: if a watched-symbol set exists, skip full
+        # processing for symbols that are neither watched, nor have an
+        # open position / pending order.  We still cache the price so
+        # that market orders submitted later have a reference price.
+        if self._watched_symbols:
+            has_position = internal_ticker in self._positions
+            has_pending = any(o.symbol == internal_ticker for o in self._pending_orders.values())
+            if internal_ticker not in self._watched_symbols and not has_position and not has_pending:
+                self._latest_prices[internal_ticker] = price
+                return
 
         state_changed = False
 

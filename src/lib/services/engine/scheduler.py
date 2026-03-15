@@ -178,6 +178,13 @@ class ActionType(StrEnum):
     # blocking it (we track pre-market and midday separately).
     CHECK_NEWS_SENTIMENT_MIDDAY = "check_news_sentiment_midday"
 
+    # Journal sync — pull today's Rithmic fills and upsert into trades_v2.
+    # Runs every 5 minutes during the ACTIVE session (03:00–12:00 ET) and
+    # once at the start of OFF_HOURS to capture any final fills.
+    # Requires RITHMIC_JOURNAL_SYNC=1 env var to be set (disabled by default
+    # so the engine runs without Rithmic credentials in dev/CI environments).
+    JOURNAL_SYNC = "journal_sync"
+
 
 @dataclass
 class ScheduledAction:
@@ -224,6 +231,7 @@ class ScheduleManager:
     GROK_INTERVAL = 15 * 60  # 15 min during active
     RISK_CHECK_INTERVAL = 60  # 1 min during active
     NO_TRADE_INTERVAL = 2 * 60  # 2 min during active
+    JOURNAL_SYNC_INTERVAL = 5 * 60  # 5 min during active
     ORB_CHECK_INTERVAL = 2 * 60  # US open          09:30–11:00 ET
     ORB_LONDON_CHECK_INTERVAL = 2 * 60  # London open      03:00–05:00 ET
     ORB_LONDON_NY_CHECK_INTERVAL = 2 * 60  # London-NY cross  08:00–10:00 ET
@@ -727,6 +735,22 @@ class ScheduleManager:
                 )
             )
 
+        # ── Journal sync — every 5 min during active hours (03:00–12:00 ET) ──
+        # Pulls today's Rithmic fills and upserts matched round-trip trades
+        # into trades_v2.  Gated by RITHMIC_JOURNAL_SYNC=1 env var.
+        import os as _os
+
+        if _os.getenv("RITHMIC_JOURNAL_SYNC", "0") == "1" and self._interval_elapsed(
+            ActionType.JOURNAL_SYNC, ts, self.JOURNAL_SYNC_INTERVAL
+        ):
+            actions.append(
+                ScheduledAction(
+                    action=ActionType.JOURNAL_SYNC,
+                    priority=8,
+                    description="Sync today's Rithmic fills → trades_v2 journal",
+                )
+            )
+
         # ── Swing detector — every 2 min during active hours (03:00–15:30 ET) ──
         # Scans daily-plan swing candidates for pullback, breakout, and gap-
         # continuation entries.  Manages per-asset SwingState (TP/SL/trail)
@@ -958,7 +982,22 @@ class ScheduleManager:
         now = datetime.now(tz=_EST)
         now_time = now.time()
 
+        # ── Journal sync — once at the start of off-hours to capture final fills ──
+        # Runs one final sync pass after the active session ends so any fills
+        # placed near the 12:00 ET close are captured before the daily report.
+        import os as _os
         from datetime import time as _dt_time
+
+        if _os.getenv("RITHMIC_JOURNAL_SYNC", "0") == "1" and not self._ran_this_session(
+            ActionType.JOURNAL_SYNC, session
+        ):
+            actions.append(
+                ScheduledAction(
+                    action=ActionType.JOURNAL_SYNC,
+                    priority=1,
+                    description="End-of-active-session journal sync: capture final Rithmic fills",
+                )
+            )
 
         # ── EOD 16:00 ET hard position close — catch-up in off-hours ─────────
         # If the scheduler was not running at exactly 16:00 ET (e.g. service

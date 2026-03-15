@@ -315,7 +315,7 @@ hr.sep{border:none;border-top:1px solid var(--border-s);margin:12px 0}
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
     <div>
       <div style="font-size:1.2rem;font-weight:700">⚙️ Settings</div>
-      <div style="font-size:0.72rem;color:var(--muted);margin-top:2px">Engine · services · features · risk · prop accounts · API keys</div>
+      <div style="font-size:0.72rem;color:var(--muted);margin-top:2px">Engine · services · features · risk · prop accounts · API keys · data sources</div>
     </div>
     <div id="engine-badge" class="badge b-gray">checking…</div>
   </div>
@@ -328,6 +328,7 @@ hr.sep{border:none;border-top:1px solid var(--border-s);margin:12px 0}
     <button class="section-tab" onclick="showSection('risk')">🛡️ Risk &amp; Trading</button>
     <button class="section-tab" onclick="showSection('propaccounts')">🏦 Prop Accounts</button>
     <button class="section-tab" onclick="showSection('keys')">🔑 API Keys</button>
+    <button class="section-tab" onclick="showSection('datasources')">📡 Data Sources</button>
   </div>
 
   <!-- ═══════════════════════════════════════════════════════════ -->
@@ -1034,6 +1035,119 @@ hr.sep{border:none;border-top:1px solid var(--border-s);margin:12px 0}
     </div>
   </div>
 
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- DATA SOURCES SECTION                                      -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <div id="section-datasources" class="section-content">
+    <div class="grid-2">
+      <div>
+        <!-- Active Source Selector -->
+        <div class="card">
+          <div class="card-title">Active Data Source</div>
+          <div class="field">
+            <label class="lbl">Route market data through:</label>
+            <div class="acct-pills" id="ds-source-pills" style="margin-top:6px">
+              <button class="acct-pill" id="ds-pill-kraken" onclick="switchDataSource('kraken')">Kraken</button>
+              <button class="acct-pill" id="ds-pill-rithmic" onclick="switchDataSource('rithmic')">Rithmic</button>
+              <button class="acct-pill" id="ds-pill-both" onclick="switchDataSource('both')">Both</button>
+            </div>
+            <div style="font-size:0.72rem;color:var(--muted);margin-top:6px;line-height:1.5">
+              <strong>Kraken</strong> — crypto pairs via Kraken WebSocket.<br/>
+              <strong>Rithmic</strong> — CME futures via Rithmic API.<br/>
+              <strong>Both</strong> — crypto routes to Kraken, futures to Rithmic.
+            </div>
+          </div>
+        </div>
+
+        <!-- Simulation Mode -->
+        <div class="card">
+          <div class="card-title">🧪 Simulation Mode</div>
+          <div id="ds-sim-panel" style="font-size:0.78rem;color:var(--text);line-height:1.6">
+            <div class="status-row">
+              <span class="status-key">SIM_ENABLED</span>
+              <span class="status-val" id="ds-sim-enabled" style="font-size:0.68rem">—</span>
+            </div>
+            <div class="status-row">
+              <span class="status-key">Sim Data Source</span>
+              <span class="status-val" id="ds-sim-source" style="font-size:0.68rem">—</span>
+            </div>
+          </div>
+          <div style="font-size:0.72rem;color:var(--muted);margin-top:8px;line-height:1.5">
+            When <strong>SIM_ENABLED=1</strong>, the engine runs in paper-trading mode.
+            Orders are simulated locally — no live fills are sent to the exchange.
+            The sim data source determines which feed provides price data for simulation fills.
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <!-- Source Status Cards -->
+        <div class="card">
+          <div class="card-title">Source Status</div>
+          <div id="ds-status-cards">
+            <!-- Kraken status card -->
+            <div style="padding:10px 12px;border-radius:8px;background:var(--bg-inner);border:1px solid var(--border-s);margin-bottom:8px">
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+                <span id="ds-kraken-dot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#ef4444;flex-shrink:0"></span>
+                <span style="font-weight:700;font-size:0.78rem">Kraken</span>
+                <span id="ds-kraken-badge" style="font-size:0.65rem;font-weight:700;padding:2px 8px;border-radius:9999px;margin-left:auto;background:#450a0a22;color:#f87171;border:1px solid #450a0a">disconnected</span>
+              </div>
+              <div style="font-size:0.72rem;color:var(--muted);line-height:1.5">
+                <div class="status-row">
+                  <span class="status-key">Feed</span>
+                  <span class="status-val" id="ds-kraken-feed" style="font-size:0.68rem">—</span>
+                </div>
+                <div class="status-row" style="margin-bottom:0">
+                  <span class="status-key">Pairs</span>
+                  <span class="status-val" id="ds-kraken-pairs" style="font-size:0.68rem">—</span>
+                </div>
+              </div>
+            </div>
+            <!-- Rithmic status card -->
+            <div style="padding:10px 12px;border-radius:8px;background:var(--bg-inner);border:1px solid var(--border-s);margin-bottom:8px">
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+                <span id="ds-rithmic-dot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#ef4444;flex-shrink:0"></span>
+                <span style="font-weight:700;font-size:0.78rem">Rithmic</span>
+                <span id="ds-rithmic-badge" style="font-size:0.65rem;font-weight:700;padding:2px 8px;border-radius:9999px;margin-left:auto;background:#450a0a22;color:#f87171;border:1px solid #450a0a">not configured</span>
+              </div>
+              <div style="font-size:0.72rem;color:var(--muted);line-height:1.5">
+                <div class="status-row">
+                  <span class="status-key">Status</span>
+                  <span class="status-val" id="ds-rithmic-status" style="font-size:0.68rem">—</span>
+                </div>
+                <div class="status-row" style="margin-bottom:0">
+                  <span class="status-key">Accounts</span>
+                  <span class="status-val" id="ds-rithmic-accounts" style="font-size:0.68rem">—</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-neutral btn-sm" onclick="loadDataSources()">↺ Refresh Status</button>
+          </div>
+        </div>
+
+        <!-- Available Symbols -->
+        <div class="card">
+          <div class="card-title">Available Symbols</div>
+          <div style="margin-bottom:6px">
+            <button class="btn btn-neutral btn-sm" onclick="toggleSymbolList()" id="ds-symbols-toggle" style="font-size:0.72rem">▶ Show symbols</button>
+          </div>
+          <div id="ds-symbols-panel" style="display:none">
+            <div id="ds-symbols-crypto">
+              <div style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--faint);margin-bottom:4px;margin-top:6px">Crypto (Kraken)</div>
+              <div id="ds-crypto-list" style="font-size:0.72rem;color:var(--muted);line-height:1.5">Loading…</div>
+            </div>
+            <div id="ds-symbols-futures" style="margin-top:8px">
+              <div style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--faint);margin-bottom:4px">Futures (Rithmic)</div>
+              <div id="ds-futures-list" style="font-size:0.72rem;color:var(--muted);line-height:1.5">Loading…</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
 </div><!-- /page -->
 
 <!-- Toast -->
@@ -1058,7 +1172,8 @@ function showSection(name) {
         (name === 'features' && el.textContent.includes('Features')) ||
         (name === 'risk' && el.textContent.includes('Risk')) ||
         (name === 'propaccounts' && el.textContent.includes('Prop')) ||
-        (name === 'keys' && el.textContent.includes('Keys')))
+        (name === 'keys' && el.textContent.includes('Keys')) ||
+        (name === 'datasources' && el.textContent.includes('Data')))
       el.classList.add('active');
   });
   localStorage.setItem('settingsTab', name);
@@ -1068,6 +1183,7 @@ function showSection(name) {
   if (name === 'risk') loadRiskSettings();
   if (name === 'keys') loadApiKeyStatus();
   if (name === 'propaccounts') { loadRithmicPanel(); checkRithmicDeps(); loadRithmicLiveStatus(); }
+  if (name === 'datasources') loadDataSources();
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1583,6 +1699,167 @@ async function loadApiKeyStatus() {
     document.getElementById('api-keys-panel').innerHTML =
       '<div style="color:#f87171;font-size:0.78rem">Failed to load key status: ' + e.message + '</div>';
   }
+}
+
+// ═══════════════════════════════════════════════════════
+// Data Sources
+// ═══════════════════════════════════════════════════════
+let _dsSymbolsVisible = false;
+
+async function loadDataSources() {
+  try {
+    const r = await fetch('/api/settings/data-source', { signal: AbortSignal.timeout(6000) });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const d = await r.json();
+
+    // Update source pills
+    ['kraken', 'rithmic', 'both'].forEach(s => {
+      const pill = document.getElementById('ds-pill-' + s);
+      if (pill) {
+        pill.className = 'acct-pill' + (d.active_source === s ? ' selected' : '');
+        if (d.active_source === s) {
+          pill.style.background = '#14532d';
+          pill.style.borderColor = '#22c55e';
+          pill.style.color = '#4ade80';
+        } else {
+          pill.style.background = '';
+          pill.style.borderColor = '';
+          pill.style.color = '';
+        }
+      }
+    });
+
+    // Kraken status
+    const kDot = document.getElementById('ds-kraken-dot');
+    const kBadge = document.getElementById('ds-kraken-badge');
+    const kFeed = document.getElementById('ds-kraken-feed');
+    if (kDot && kBadge) {
+      const kColor = d.kraken_status === 'connected' ? '#22c55e' : d.kraken_status === 'connecting' ? '#eab308' : '#ef4444';
+      kDot.style.background = kColor;
+      kBadge.textContent = d.kraken_status;
+      if (d.kraken_status === 'connected') {
+        kBadge.style.background = '#14532d22'; kBadge.style.color = '#4ade80'; kBadge.style.borderColor = '#14532d';
+      } else if (d.kraken_status === 'connecting') {
+        kBadge.style.background = '#713f1222'; kBadge.style.color = '#fbbf24'; kBadge.style.borderColor = '#713f12';
+      } else {
+        kBadge.style.background = '#450a0a22'; kBadge.style.color = '#f87171'; kBadge.style.borderColor = '#450a0a';
+      }
+    }
+    if (kFeed) kFeed.textContent = d.kraken_status === 'connected' ? 'WebSocket active' : d.kraken_status === 'connecting' ? 'Connecting…' : 'Offline';
+
+    // Rithmic status
+    const rDot = document.getElementById('ds-rithmic-dot');
+    const rBadge = document.getElementById('ds-rithmic-badge');
+    const rStatus = document.getElementById('ds-rithmic-status');
+    if (rDot && rBadge) {
+      const rColor = d.rithmic_status === 'connected' ? '#22c55e' : d.rithmic_status === 'connecting' ? '#eab308' : '#ef4444';
+      rDot.style.background = rColor;
+      rBadge.textContent = d.rithmic_status === 'not_configured' ? 'not configured' : d.rithmic_status;
+      if (d.rithmic_status === 'connected') {
+        rBadge.style.background = '#14532d22'; rBadge.style.color = '#4ade80'; rBadge.style.borderColor = '#14532d';
+      } else {
+        rBadge.style.background = '#450a0a22'; rBadge.style.color = '#f87171'; rBadge.style.borderColor = '#450a0a';
+      }
+    }
+    if (rStatus) rStatus.textContent = d.rithmic_status === 'connected' ? 'Live' : d.rithmic_status === 'not_configured' ? 'No accounts configured' : 'Offline';
+
+    // Sim status
+    const simEn = document.getElementById('ds-sim-enabled');
+    const simSrc = document.getElementById('ds-sim-source');
+    if (simEn) {
+      simEn.innerHTML = d.sim_enabled
+        ? '<span style="color:#4ade80;font-weight:700">● Active</span>'
+        : '<span style="color:var(--muted)">○ Disabled</span>';
+    }
+    if (simSrc) simSrc.textContent = d.sim_data_source || d.active_source;
+
+    // Load symbols in parallel
+    loadDataSourceSymbols();
+
+  } catch (e) {
+    toast('Failed to load data source status: ' + e.message, true);
+  }
+}
+
+async function loadDataSourceSymbols() {
+  try {
+    const r = await fetch('/api/sources/symbols', { signal: AbortSignal.timeout(6000) });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const d = await r.json();
+
+    // Crypto symbols
+    const cryptoEl = document.getElementById('ds-crypto-list');
+    if (cryptoEl && d.crypto) {
+      const kPairs = document.getElementById('ds-kraken-pairs');
+      if (kPairs) kPairs.textContent = d.crypto.length + ' pairs available';
+      if (d.crypto.length === 0) {
+        cryptoEl.textContent = 'No crypto symbols available';
+      } else {
+        cryptoEl.innerHTML = d.crypto.map(s => {
+          const liveDot = s.live
+            ? '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#22c55e;margin-right:4px"></span>'
+            : '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#ef4444;margin-right:4px"></span>';
+          return '<div class="status-row" style="padding:2px 0">' + liveDot +
+            '<span class="status-key" style="font-size:0.72rem">' + (s.name || s.symbol) + '</span>' +
+            '<span class="status-val" style="font-size:0.68rem">' + s.symbol + '</span></div>';
+        }).join('');
+      }
+    }
+
+    // Futures symbols
+    const futuresEl = document.getElementById('ds-futures-list');
+    if (futuresEl && d.futures) {
+      const rAcct = document.getElementById('ds-rithmic-accounts');
+      if (rAcct) rAcct.textContent = d.futures.length + ' contracts';
+      if (d.futures.length === 0) {
+        futuresEl.textContent = 'No futures symbols available';
+      } else {
+        futuresEl.innerHTML = d.futures.map(s => {
+          const liveDot = s.live
+            ? '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#22c55e;margin-right:4px"></span>'
+            : '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#ef4444;margin-right:4px"></span>';
+          return '<div class="status-row" style="padding:2px 0">' + liveDot +
+            '<span class="status-key" style="font-size:0.72rem">' + s.symbol + '</span>' +
+            '<span class="status-val" style="font-size:0.68rem">' + s.name + '</span></div>';
+        }).join('');
+      }
+    }
+  } catch (e) {
+    const cryptoEl = document.getElementById('ds-crypto-list');
+    const futuresEl = document.getElementById('ds-futures-list');
+    if (cryptoEl) cryptoEl.innerHTML = '<span style="color:#f87171">Failed to load symbols</span>';
+    if (futuresEl) futuresEl.innerHTML = '<span style="color:#f87171">Failed to load symbols</span>';
+  }
+}
+
+async function switchDataSource(source) {
+  try {
+    const r = await fetch('/api/settings/data-source', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source: source }),
+      signal: AbortSignal.timeout(5000)
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const d = await r.json();
+    if (d.status === 'ok') {
+      toast('Data source switched to ' + source);
+      loadDataSources();
+    } else {
+      toast(d.message || 'Failed to switch source', true);
+    }
+  } catch (e) {
+    toast('Failed to switch data source: ' + e.message, true);
+  }
+}
+
+function toggleSymbolList() {
+  const panel = document.getElementById('ds-symbols-panel');
+  const btn = document.getElementById('ds-symbols-toggle');
+  if (!panel) return;
+  _dsSymbolsVisible = !_dsSymbolsVisible;
+  panel.style.display = _dsSymbolsVisible ? 'block' : 'none';
+  if (btn) btn.textContent = _dsSymbolsVisible ? '▼ Hide symbols' : '▶ Show symbols';
 }
 
 // ═══════════════════════════════════════════════════════

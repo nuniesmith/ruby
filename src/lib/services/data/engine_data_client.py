@@ -785,6 +785,56 @@ class EngineDataClient:
             logger.debug("get_stored_bars: DataFrame construction failed for %s: %s", symbol, exc)
             return None
 
+    # ------------------------------------------------------------------
+    # Fill triggers
+    # ------------------------------------------------------------------
+
+    def fill_symbol(
+        self,
+        symbol: str,
+        days_back: int = 365,
+        interval: str = "1m",
+        timeout: int | None = None,
+    ) -> dict[str, Any] | None:
+        """Trigger a bar fill on the data service for *symbol*.
+
+        Routes to ``POST /bars/{symbol}/fill``.  The data service will
+        fetch missing bars from Massive/Kraken/yfinance and backfill
+        Postgres.
+
+        Parameters
+        ----------
+        symbol:
+            Short symbol or Yahoo-style ticker.
+        days_back:
+            Days of history to fill.
+        interval:
+            Bar interval (default ``"1m"``).
+        timeout:
+            Request timeout override (default: class-level bars_timeout).
+
+        Returns
+        -------
+        dict | None
+            Fill job info dict from the data service, or None on error.
+        """
+        return self._post(
+            f"/bars/{symbol}/fill",
+            body={"days_back": days_back, "interval": interval},
+            timeout=timeout or self._bars_timeout,
+        )
+
+    def fill_status(self, symbol: str) -> dict[str, Any] | None:
+        """Check fill job status for *symbol*.
+
+        Routes to ``GET /bars/{symbol}/fill/status``.
+        """
+        return self._get(f"/bars/{symbol}/fill/status")
+
+    # ------------------------------------------------------------------
+    # Health / availability
+    # ------------------------------------------------------------------
+
     def is_available(self, timeout: int = 3) -> bool:
         """Return True if the engine health endpoint responds within ``timeout`` s."""
         try:

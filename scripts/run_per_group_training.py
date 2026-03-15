@@ -1,43 +1,65 @@
 #!/usr/bin/env python3
 """
-run_per_group_training.py — Per-Group CNN Training Orchestrator
-================================================================
-Standalone script that orchestrates per-group CNN training runs by
+run_per_group_training.py — 3-Tier CNN Training Orchestrator
+==============================================================
+Standalone script that orchestrates hierarchical CNN training runs by
 making HTTP calls to the trainer server's ``POST /train`` endpoint.
 
-What it does:
-  1. Iterates over asset groups (metals, equity_micros, treasuries, agriculture)
-  2. For each group, POSTs a training request with ``train_mode="per_group"``
-  3. Polls ``GET /status`` every 30s until training finishes
-  4. Logs progress (status, current epoch, accuracy) as training runs
-  5. After each group completes, fetches and displays the results
-  6. After all groups, runs a combined training for comparison
-  7. Generates a comparison summary table (per-group vs combined accuracy)
+3-Tier Training Architecture:
+  Tier 1 — Per-Asset: Train individual models for each symbol.
+    - MGC alone, SIL alone
+    - MES alone, MNQ alone, M2K alone, MYM alone
+    - ZN alone
+
+  Tier 2 — Per-Group: Train group models on grouped assets.
+    - metals:        MGC + SIL  (trained together)
+    - equity_micros: MES + MNQ + M2K + MYM  (trained together)
+    - treasuries:    ZN  (same as per-asset, but named as group)
+
+  Tier 3 — Master: Train a master ensemble model on ALL symbols,
+    using the per-group models as a comparison baseline.
+    - master: (MGC, SIL) + (MES, MNQ, M2K, MYM) + (ZN)
+
+Inference Resolution (breakout_cnn._resolve_model_name):
+  1. Per-asset model:  breakout_cnn_best_{SYMBOL}.pt
+  2. Per-group model:  breakout_cnn_best_{group}.pt
+  3. Combined/master:  breakout_cnn_best.pt
 
 Supports:
+  - ``--tier 1|2|3|all`` to run specific tiers
   - ``--group metals`` to train only one group
   - ``--dry-run`` to show what would be sent without calling the API
   - ``--trainer-url`` to point at a non-default trainer server
   - ``--step`` to run a specific pipeline step instead of full
+  - ``--skip-combined`` to skip the tier-3 master training
 
 Usage:
-    # Full per-group training (all 4 groups + combined comparison):
+    # Full 3-tier training (per-asset → per-group → master):
+    python scripts/run_per_group_training.py --tier all
+
+    # Tier 1 only — train each asset individually:
+    python scripts/run_per_group_training.py --tier 1
+
+    # Tier 2 only — train group models:
+    python scripts/run_per_group_training.py --tier 2
+
+    # Tier 3 only — train master model:
+    python scripts/run_per_group_training.py --tier 3
+
+    # Legacy mode — per-group + combined (same as before):
     python scripts/run_per_group_training.py
 
-    # Train only metals group:
-    python scripts/run_per_group_training.py --group metals
+    # Train only metals group (tier 1 assets + tier 2 group):
+    python scripts/run_per_group_training.py --group metals --tier all
 
     # Dry run — show what would be sent:
-    python scripts/run_per_group_training.py --dry-run
+    python scripts/run_per_group_training.py --dry-run --tier all
 
     # Point at a different trainer server:
     python scripts/run_per_group_training.py --trainer-url http://oryx:8200
 
     # Run only the train step (assumes dataset already exists):
-    python scripts/run_per_group_training.py --step train
-
-    # Skip the combined comparison run:
-    python scripts/run_per_group_training.py --skip-combined
+    python scripts/run_per_group_training.py --step train --tier all
 
     # Custom training hyperparameters:
     python scripts/run_per_group_training.py --epochs 80 --batch-size 32 --patience 12
@@ -77,6 +99,13 @@ ASSET_GROUPS: dict[str, list[str]] = {
 }
 
 ALL_SYMBOLS: list[str] = sorted({s for symbols in ASSET_GROUPS.values() for s in symbols})
+
+# Tier descriptions for display
+TIER_NAMES: dict[str, str] = {
+    "1": "Per-Asset (individual symbol models)",
+    "2": "Per-Group (group models: metals, equity_micros, treasuries)",
+    "3": "Master (combined model trained on all symbols)",
+}
 
 # ---------------------------------------------------------------------------
 # Defaults
@@ -530,11 +559,199 @@ def _check_health(base_url: str) -> bool:
 # ---------------------------------------------------------------------------
 # Main orchestration
 # ---------------------------------------------------------------------------
-def run_per_group_training(args: argparse.Namespace) -> int:
-    """Run per-group training orchestration. Returns exit code."""
-    base_url = args.trainer_url.rstrip("/")
+def _resolve_tiers(args: argparse.Namespace) -> list[str]:
+    """Determine which tiers to run based on --tier argument."""
+    tier_arg = getattr(args, "tier", None) or "legacy"
+    if tier_arg == "all":
+        return ["1", "2", "3"]
+    if tier_arg == "legacy":
+        # Original behaviour: per-group + combined
+        return ["2", "3"]
+    # Single tier
+    return [tier_arg]
 
-    _banner("Per-Group CNN Training Orchestrator")
+
+def _run_tier1_per_asset(
+    base_url: str,
+    groups_to_train: dict[str, list[str]],
+    args: argparse.Namespace,
+    all_results: list[dict],
+) -> int:
+    """Tier 1: Train each symbol individually. Returns failure count."""
+    _banner("Tier 1 — Per-Asset Training")
+    failures = 0
+
+    for group_name, symbols in groups_to_train.items():
+        _section(f"Tier 1 — {group_name} assets ({', '.join(symbols)})")
+
+        for symbol in symbols:
+            label = f"asset:{symbol}"
+            results = _run_training_job(
+                base_url=base_url,
+                label=label,
+                symbols=[symbol],
+                train_mode="per_asset",
+                args=args,
+            )
+            results["tier"] = "1"
+            results["group"] = group_name
+            all_results.append(results)
+            if results["status"] == "failed":
+                failures += 1
+                if not args.continue_on_failure:
+                    _fail(f"Stopping tier 1 — {symbol} failed (use --continue-on-failure to keep going)")
+                    return failures
+
+    return failures
+
+
+def _run_tier2_per_group(
+    base_url: str,
+    groups_to_train: dict[str, list[str]],
+    args: argparse.Namespace,
+    all_results: list[dict],
+) -> int:
+    """Tier 2: Train group models. Returns failure count."""
+    _banner("Tier 2 — Per-Group Training")
+    failures = 0
+
+    for group_name, symbols in groups_to_train.items():
+        label = f"group:{group_name}"
+        results = _run_training_job(
+            base_url=base_url,
+            label=label,
+            symbols=symbols,
+            train_mode="per_group",
+            args=args,
+        )
+        results["tier"] = "2"
+        results["group"] = group_name
+        all_results.append(results)
+        if results["status"] == "failed":
+            failures += 1
+            if not args.continue_on_failure:
+                _fail(f"Stopping tier 2 — {group_name} failed (use --continue-on-failure to keep going)")
+                return failures
+
+    return failures
+
+
+def _run_tier3_master(
+    base_url: str,
+    args: argparse.Namespace,
+    all_results: list[dict],
+) -> int:
+    """Tier 3: Train master model on all symbols. Returns failure count."""
+    _banner("Tier 3 — Master Model Training")
+
+    label = "master:combined"
+    results = _run_training_job(
+        base_url=base_url,
+        label=label,
+        symbols=ALL_SYMBOLS,
+        train_mode="combined",
+        args=args,
+    )
+    results["tier"] = "3"
+    results["group"] = "all"
+    all_results.append(results)
+    return 1 if results["status"] == "failed" else 0
+
+
+def _print_tiered_comparison(all_results: list[dict]) -> None:
+    """Print a tiered comparison table grouping results by tier."""
+    _section("Tiered Comparison Summary")
+    print()
+
+    # Table header
+    header = f"  {'Tier':<6} {'Model':<24} {'Status':<12} {'Accuracy':>10} {'Precision':>10} {'Recall':>10} {'Epochs':>8} {'Promoted':>10}"
+    separator = f"  {'─' * 6} {'─' * 24} {'─' * 12} {'─' * 10} {'─' * 10} {'─' * 10} {'─' * 8} {'─' * 10}"
+
+    print(f"{BOLD}{header}{RESET}")
+    print(f"{DIM}{separator}{RESET}")
+
+    current_tier = ""
+    for r in all_results:
+        tier = r.get("tier", "?")
+        label = r["label"]
+        status = r["status"]
+
+        # Tier separator
+        if tier != current_tier:
+            if current_tier:
+                print(f"{DIM}{separator}{RESET}")
+            current_tier = tier
+
+        if status == "done":
+            acc = f"{r['accuracy']:.1f}%"
+            prec = f"{r['precision']:.1f}%"
+            rec = f"{r['recall']:.1f}%"
+            epochs = str(r["epochs_trained"])
+            promoted = "✓ yes" if r["promoted"] else "✗ no"
+            color = GREEN if r["promoted"] else YELLOW
+        elif status == "failed":
+            acc = prec = rec = epochs = "—"
+            promoted = "—"
+            color = RED
+        elif status == "dry_run":
+            acc = prec = rec = epochs = "(dry run)"
+            promoted = "—"
+            color = DIM
+        else:
+            acc = prec = rec = epochs = "—"
+            promoted = "—"
+            color = YELLOW
+
+        row = f"  {tier:<6} {label:<24} {status:<12} {acc:>10} {prec:>10} {rec:>10} {epochs:>8} {promoted:>10}"
+        print(f"{color}{row}{RESET}")
+
+    print()
+
+    # Per-tier averages
+    for tier_num in ("1", "2", "3"):
+        tier_results = [r for r in all_results if r.get("tier") == tier_num and r["status"] == "done"]
+        if tier_results:
+            avg_acc = sum(r["accuracy"] for r in tier_results) / len(tier_results)
+            tier_name = TIER_NAMES.get(tier_num, f"Tier {tier_num}")
+            _info(f"Tier {tier_num} avg accuracy ({tier_name}): {avg_acc:.1f}%  ({len(tier_results)} models)")
+
+    # Compare tier 2 vs tier 3
+    tier2 = [r for r in all_results if r.get("tier") == "2" and r["status"] == "done"]
+    tier3 = [r for r in all_results if r.get("tier") == "3" and r["status"] == "done"]
+    if tier2 and tier3:
+        avg_group = sum(r["accuracy"] for r in tier2) / len(tier2)
+        master_acc = tier3[0]["accuracy"]
+        diff = avg_group - master_acc
+        print()
+        if diff > 0:
+            _ok(f"Per-group models outperform master by {diff:+.1f}%  →  recommend per-group inference")
+        elif diff < 0:
+            _warn(f"Master model outperforms per-group avg by {abs(diff):.1f}%  →  recommend master inference")
+        else:
+            _info("Per-group and master models have identical average accuracy")
+
+    # Compare tier 1 vs tier 2 within groups
+    for group_name in ASSET_GROUPS:
+        t1 = [r for r in all_results if r.get("tier") == "1" and r.get("group") == group_name and r["status"] == "done"]
+        t2 = [r for r in all_results if r.get("tier") == "2" and r.get("group") == group_name and r["status"] == "done"]
+        if t1 and t2:
+            avg_asset = sum(r["accuracy"] for r in t1) / len(t1)
+            group_acc = t2[0]["accuracy"]
+            diff = avg_asset - group_acc
+            if diff > 0:
+                _ok(f"  {group_name}: per-asset avg beats group by {diff:+.1f}%")
+            elif diff < 0:
+                _warn(f"  {group_name}: group model beats per-asset avg by {abs(diff):.1f}%")
+            else:
+                _info(f"  {group_name}: tied")
+
+
+def run_per_group_training(args: argparse.Namespace) -> int:
+    """Run tiered training orchestration. Returns exit code."""
+    base_url = args.trainer_url.rstrip("/")
+    tiers = _resolve_tiers(args)
+
+    _banner("3-Tier CNN Training Orchestrator")
 
     # Determine which groups to train
     if args.group:
@@ -555,11 +772,24 @@ def run_per_group_training(args: argparse.Namespace) -> int:
     _info(f"Epochs:       {args.epochs}")
     _info(f"Batch size:   {args.batch_size}")
     _info(f"Patience:     {args.patience}")
-    _info(f"Groups:       {len(groups_to_train)}")
-    for name, symbols in groups_to_train.items():
-        _info(f"  {name:<20} → {', '.join(symbols)}")
-    if not args.skip_combined:
-        _info(f"  {'combined':<20} → {', '.join(ALL_SYMBOLS)}")
+    _info(f"Tiers:        {', '.join(tiers)}")
+    for tier in tiers:
+        _info(f"  Tier {tier}: {TIER_NAMES.get(tier, '?')}")
+
+    if "1" in tiers or "2" in tiers:
+        _info(f"Groups:       {len(groups_to_train)}")
+        for name, symbols in groups_to_train.items():
+            _info(f"  {name:<20} → {', '.join(symbols)}")
+
+    if "1" in tiers:
+        total_assets = sum(len(s) for s in groups_to_train.values())
+        _info(f"Tier 1 models: {total_assets} (one per asset)")
+
+    if "3" in tiers and not args.skip_combined:
+        _info(f"  {'master':<20} → {', '.join(ALL_SYMBOLS)}")
+    elif "3" in tiers and args.skip_combined:
+        _warn("Tier 3 (master) skipped via --skip-combined")
+
     if args.dry_run:
         _warn("DRY RUN — no API calls will be made")
     print()
@@ -575,39 +805,55 @@ def run_per_group_training(args: argparse.Namespace) -> int:
     failures = 0
     overall_start = time.monotonic()
 
-    # ── Per-group training runs ────────────────────────────────────────
-    for group_name, symbols in groups_to_train.items():
-        results = _run_training_job(
-            base_url=base_url,
-            label=group_name,
-            symbols=symbols,
-            train_mode="per_group",
-            args=args,
+    # ── Tier 1: Per-asset training ─────────────────────────────────────
+    if "1" in tiers:
+        tier1_failures = _run_tier1_per_asset(
+            base_url,
+            groups_to_train,
+            args,
+            all_results,
         )
-        all_results.append(results)
-        if results["status"] == "failed":
-            failures += 1
-            if not args.continue_on_failure:
-                _fail(f"Stopping early — {group_name} failed (use --continue-on-failure to keep going)")
-                break
+        failures += tier1_failures
+        if tier1_failures > 0 and not args.continue_on_failure:
+            _fail("Stopping — tier 1 had failures")
+        else:
+            _ok(f"Tier 1 complete — {tier1_failures} failures")
+        print()
 
-    # ── Combined training run (for comparison) ─────────────────────────
-    if not args.skip_combined and (failures == 0 or args.continue_on_failure):
-        results = _run_training_job(
-            base_url=base_url,
-            label="combined",
-            symbols=ALL_SYMBOLS,
-            train_mode="combined",
-            args=args,
+    # ── Tier 2: Per-group training ─────────────────────────────────────
+    if "2" in tiers and (failures == 0 or args.continue_on_failure):
+        tier2_failures = _run_tier2_per_group(
+            base_url,
+            groups_to_train,
+            args,
+            all_results,
         )
-        all_results.append(results)
-        if results["status"] == "failed":
-            failures += 1
+        failures += tier2_failures
+        if tier2_failures > 0 and not args.continue_on_failure:
+            _fail("Stopping — tier 2 had failures")
+        else:
+            _ok(f"Tier 2 complete — {tier2_failures} failures")
+        print()
+
+    # ── Tier 3: Master model training ──────────────────────────────────
+    if "3" in tiers and not args.skip_combined and (failures == 0 or args.continue_on_failure):
+        tier3_failures = _run_tier3_master(base_url, args, all_results)
+        failures += tier3_failures
+        if tier3_failures == 0:
+            _ok("Tier 3 complete — master model trained")
+        else:
+            _fail("Tier 3 failed — master model training failed")
+        print()
 
     # ── Summary ────────────────────────────────────────────────────────
     overall_elapsed = time.monotonic() - overall_start
 
-    _print_comparison_table(all_results)
+    # Use tiered table if any tier metadata exists, else fall back to legacy
+    has_tiers = any(r.get("tier") for r in all_results)
+    if has_tiers:
+        _print_tiered_comparison(all_results)
+    else:
+        _print_comparison_table(all_results)
 
     _section("Final Summary")
     total_runs = len(all_results)
@@ -625,6 +871,26 @@ def run_per_group_training(args: argparse.Namespace) -> int:
 
     if failed == 0:
         _ok("All training runs completed successfully ✓")
+        if has_tiers:
+            print()
+            _info("Model files produced:")
+            for r in all_results:
+                if r["status"] in ("done", "dry_run"):
+                    tier = r.get("tier", "?")
+                    label = r["label"]
+                    if tier == "1":
+                        symbol = label.replace("asset:", "")
+                        _dim(f"  breakout_cnn_best_{symbol}.pt")
+                    elif tier == "2":
+                        group = label.replace("group:", "")
+                        _dim(f"  breakout_cnn_best_{group}.pt")
+                    elif tier == "3":
+                        _dim(f"  breakout_cnn_best.pt  (master/champion)")
+            print()
+            _info("Inference resolution order:")
+            _dim("  1. Per-asset:  breakout_cnn_best_{SYMBOL}.pt")
+            _dim("  2. Per-group:  breakout_cnn_best_{group}.pt")
+            _dim("  3. Master:     breakout_cnn_best.pt")
     else:
         _fail(f"{failed} training run(s) failed ✗")
 
@@ -637,27 +903,66 @@ def run_per_group_training(args: argparse.Namespace) -> int:
 # ---------------------------------------------------------------------------
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Orchestrate per-group CNN training runs via the trainer server API",
+        description="Orchestrate 3-tier CNN training runs via the trainer server API",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=textwrap.dedent("""\
+            3-Tier Training Architecture:
+              Tier 1 — Per-Asset:   Individual model per symbol
+              Tier 2 — Per-Group:   Group model (metals, equity_micros, treasuries)
+              Tier 3 — Master:      Combined model on all symbols
+
             Asset Groups:
               metals          MGC, SIL
               equity_micros   MES, MNQ, M2K, MYM
               treasuries      ZN
 
+            Inference Resolution Order:
+              1. breakout_cnn_best_{SYMBOL}.pt   (per-asset)
+              2. breakout_cnn_best_{group}.pt    (per-group)
+              3. breakout_cnn_best.pt            (master/combined)
+
             Examples:
-              python scripts/run_per_group_training.py                          # all groups + combined
-              python scripts/run_per_group_training.py --group metals           # metals only
-              python scripts/run_per_group_training.py --dry-run                # show what would be sent
-              python scripts/run_per_group_training.py --skip-combined          # groups only, no combined
-              python scripts/run_per_group_training.py --step train             # train step only
-              python scripts/run_per_group_training.py --epochs 40 --patience 8 # custom hyperparams
+              # Full 3-tier training (per-asset → per-group → master):
+              python scripts/run_per_group_training.py --tier all
+
+              # Tier 1 only — individual asset models:
+              python scripts/run_per_group_training.py --tier 1
+
+              # Tier 2 only — group models (legacy default):
+              python scripts/run_per_group_training.py --tier 2
+
+              # Tier 3 only — master model:
+              python scripts/run_per_group_training.py --tier 3
+
+              # Legacy mode (tier 2 + tier 3, same as before):
+              python scripts/run_per_group_training.py
+
+              # Metals group only, all tiers:
+              python scripts/run_per_group_training.py --group metals --tier all
+
+              # Dry run:
+              python scripts/run_per_group_training.py --dry-run --tier all
+
+              # Train step only (dataset must exist):
+              python scripts/run_per_group_training.py --step train --tier all
+
+              # Custom hyperparams:
+              python scripts/run_per_group_training.py --epochs 40 --patience 8 --tier all
         """),
     )
     parser.add_argument(
         "--trainer-url",
         default=DEFAULT_TRAINER_URL,
         help=f"Trainer server base URL (default: {DEFAULT_TRAINER_URL})",
+    )
+    parser.add_argument(
+        "--tier",
+        default=None,
+        choices=["1", "2", "3", "all"],
+        help=(
+            "Training tier: 1=per-asset, 2=per-group, 3=master, all=1+2+3. "
+            "Default (no flag): legacy mode (tier 2 + tier 3)"
+        ),
     )
     parser.add_argument(
         "--step",
@@ -679,12 +984,12 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--skip-combined",
         action="store_true",
-        help="Skip the combined training comparison run",
+        help="Skip the tier-3 master/combined training run",
     )
     parser.add_argument(
         "--continue-on-failure",
         action="store_true",
-        help="Continue training remaining groups even if one fails",
+        help="Continue training remaining models even if one fails",
     )
     parser.add_argument(
         "--days-back",
