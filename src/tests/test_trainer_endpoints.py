@@ -258,14 +258,15 @@ class TestValidateEndpoint:
             "valid": True,
             "total_rows": 100,
             "columns": ["image_path", "label", "symbol"],
-            "label_distribution": {1: 50, 0: 50},
+            "label_distribution": {"good_long": 25, "good_short": 25, "bad_long": 25, "bad_short": 25},
             "symbols": ["MGC", "MES"],
             "missing_images": 0,
-            "empty_image_paths": 0,
+            "errors": [],
+            "warnings": [],
         }
 
         with patch(
-            "lib.services.training.dataset_generator.validate_dataset",
+            "lib.services.training.dataset_generator.validate_dataset_pre_training",
             return_value=mock_report,
         ):
             resp = await client.get("/train/validate")
@@ -279,11 +280,14 @@ class TestValidateEndpoint:
     async def test_validate_missing_csv_returns_404(self, client: httpx.AsyncClient) -> None:
         mock_report = {
             "valid": False,
-            "error": "CSV not found: /app/dataset/labels.csv",
+            "total_rows": 0,
+            "missing_images": 0,
+            "errors": ["CSV not found: /app/dataset/labels.csv"],
+            "warnings": [],
         }
 
         with patch(
-            "lib.services.training.dataset_generator.validate_dataset",
+            "lib.services.training.dataset_generator.validate_dataset_pre_training",
             return_value=mock_report,
         ):
             resp = await client.get("/train/validate")
@@ -295,15 +299,15 @@ class TestValidateEndpoint:
             "valid": False,
             "total_rows": 50,
             "columns": ["image_path", "label"],
-            "label_distribution": {1: 25, 0: 25},
+            "label_distribution": {"good_long": 13, "good_short": 12, "bad_long": 13, "bad_short": 12},
             "symbols": [],
             "missing_images": 10,
-            "empty_image_paths": 0,
-            "error": "10 images not found on disk",
+            "errors": ["10 images not found on disk"],
+            "warnings": [],
         }
 
         with patch(
-            "lib.services.training.dataset_generator.validate_dataset",
+            "lib.services.training.dataset_generator.validate_dataset_pre_training",
             return_value=mock_report,
         ):
             resp = await client.get("/train/validate")
@@ -321,11 +325,12 @@ class TestValidateEndpoint:
             "label_distribution": {},
             "symbols": [],
             "missing_images": 0,
-            "empty_image_paths": 0,
+            "errors": [],
+            "warnings": [],
         }
 
         with patch(
-            "lib.services.training.dataset_generator.validate_dataset",
+            "lib.services.training.dataset_generator.validate_dataset_pre_training",
             return_value=mock_report,
         ):
             resp = await client.get("/train/validate")
