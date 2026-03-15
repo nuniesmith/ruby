@@ -446,7 +446,7 @@ def _build_registry() -> dict[str, Asset]:
             full_micro_ratio=10.0,
         ),
         peers=("British Pound", "Swiss Franc"),
-        primary_sessions=("london", "frankfurt", "london_ny"),
+        primary_sessions=("london", "london_ny"),
     )
 
     registry["British Pound"] = Asset(
@@ -562,7 +562,7 @@ def _build_registry() -> dict[str, Asset]:
             full_micro_ratio=1.0,
         ),
         peers=("Euro FX",),
-        primary_sessions=("london", "frankfurt"),
+        primary_sessions=("london",),
     )
 
     # ── Treasuries ──────────────────────────────────────────────────────

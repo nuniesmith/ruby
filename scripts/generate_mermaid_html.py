@@ -248,7 +248,7 @@ CME · Sydney · Tokyo · Shanghai ORB sessions"]
 COMPUTE_DAILY_FOCUS · GROK_MORNING_BRIEF
 CHECK_NEWS_SENTIMENT 07:00 ET · PREP_ALERTS"]
         I3["ACTIVE  03:00–12:00 ET
-Frankfurt · London · LN-NY · US Open ORB
+London · LN-NY · US Open ORB
 RUBY_RECOMPUTE every 5 min
 GROK_LIVE_UPDATE every 15 min
 CHECK_RISK_RULES · CHECK_NO_TRADE
@@ -481,29 +481,27 @@ CME Globex re-open"]
 
     subgraph Morning["🌅 Morning Sessions  (ET)"]
         direction LR
-        U5["CHECK_ORB_FRANKFURT
-03:00–04:30"]
-        U6["CHECK_ORB_LONDON
+        U5["CHECK_ORB_LONDON
 03:00–05:00"]
-        U7["CHECK_ORB_LONDON_NY
+        U6["CHECK_ORB_LONDON_NY
 08:00–10:00"]
-        U8["CHECK_ORB
+        U7["CHECK_ORB
 09:30–11:00
 US Open"]
     end
 
     subgraph USDay["☀️ US Day / Crypto  (ET)"]
         direction LR
-        U9["CHECK_ORB_CME_SETTLE
+        U8["CHECK_ORB_CME_SETTLE
 14:00–15:30
 metals / energy"]
-        U10["CHECK_ORB_CRYPTO
+        U9["CHECK_ORB_CRYPTO
 UTC0 + UTC12
 BTC · ETH · SOL"]
     end
 
     subgraph Multi["🔄 Multi-Type Scan  (every 2 min)"]
-        U11["CHECK_BREAKOUT_MULTI
+        U10["CHECK_BREAKOUT_MULTI
 PDR · IB · Consolidation + 9 additional types in parallel
 handle_breakout_multi
 trading/strategies/rb/open/sessions.py"]
@@ -837,7 +835,7 @@ GENERATE_CHART_DATASET → DatasetGenerator
 RBSimulator
 services/training/rb_simulator.py"]
         AG["dataset_generator.py
-180-day lookback
+365-day lookback
 13 breakout types × all assets
 _build_row() 25+ features
 split_dataset() + validate_dataset()"]

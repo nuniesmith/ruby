@@ -216,7 +216,7 @@ _FALLBACK_SYMBOLS: list[str] = [
     "ZB",  # 30Y T-Bond
     # Agricultural — ZW has sufficient coverage; ZC/ZS dropped (<96% coverage)
     "ZW",  # Wheat
-    # Dropped symbols (insufficient 1-min bar history for 180-day training window):
+    # Dropped symbols (insufficient 1-min bar history for 365-day training window):
     # MHG  (14.3%), MCL  (0.4%),  MNG  (0.0%),
     # 6E   (2.5%),  6B   (2.6%),  6J   (4.7%),
     # 6A   (1.7%),  6C   (1.3%),  6S   (1.1%),
@@ -421,7 +421,7 @@ class TrainRequest(BaseModel):
     """
 
     symbols: list[str] | None = Field(None, description="Symbols to generate dataset for")
-    days_back: int | None = Field(None, ge=1, le=365, description="Days of history")
+    days_back: int | None = Field(None, ge=1, le=730, description="Days of history (default: 365)")
     breakout_type: str = Field("all", description="ORB | PrevDay | InitialBalance | Consolidation | all")
     orb_session: str | None = Field(None, description="Session filter (us, london, all, ...)")
     bars_source: str | None = Field(None, description="Data source: massive | db | cache | csv")
@@ -915,6 +915,100 @@ def _run_training_pipeline(params: TrainRequest) -> None:
                     error=(f"No images found in {images_dir} — run 'Generate Dataset' first, or use 'Full Pipeline'.")
                 )
                 return
+
+        # ═══════════════════════════════════════════════════════════════════
+        # PRE-TRAINING VALIDATION GATE
+        # Runs before any GPU work to catch dataset issues early.
+        # Auto-fixes recoverable problems (Docker paths, missing images,
+        # duplicates) and aborts if the dataset is fundamentally broken.
+        # ═══════════════════════════════════════════════════════════════════
+        if step in ("train", "full"):
+            if _state.cancel_requested:
+                _state.finish(error="Cancelled before pre-training validation")
+                return
+
+            _state.set(TrainStatus.GENERATING, "Running pre-training dataset validation")
+
+            from lib.services.training.dataset_generator import validate_dataset_pre_training
+
+            logger.info("Running pre-training dataset validation on %s", str(labels_csv))
+
+            val_report = validate_dataset_pre_training(
+                csv_path=str(labels_csv),
+                check_images=True,
+                auto_fix=True,
+                min_total_rows=500,
+                max_missing_image_pct=5.0,
+                max_label_imbalance_ratio=2.5,
+                min_symbols=1,
+            )
+
+            # Log the full report for audit trail
+            logger.info(
+                "Pre-training validation report",
+                valid=val_report["valid"],
+                total_rows=val_report["total_rows"],
+                usable_rows=val_report["usable_rows"],
+                missing_images=val_report["missing_images"],
+                duplicates_removed=val_report["duplicates_removed"],
+                paths_fixed=val_report["paths_fixed"],
+                fixes_applied=len(val_report["fixes_applied"]),
+                errors=len(val_report["errors"]),
+                warnings=len(val_report["warnings"]),
+            )
+
+            # Log label and symbol distributions
+            if val_report.get("label_distribution"):
+                logger.info(
+                    "Dataset labels: %s",
+                    ", ".join(f"{k}={v}" for k, v in sorted(val_report["label_distribution"].items())),
+                )
+            if val_report.get("symbol_distribution"):
+                logger.info(
+                    "Dataset symbols (%d): %s",
+                    val_report.get("unique_symbols", 0),
+                    ", ".join(f"{k}={v}" for k, v in sorted(val_report["symbol_distribution"].items())),
+                )
+            if val_report.get("breakout_type_distribution"):
+                logger.info(
+                    "Dataset breakout types: %s",
+                    ", ".join(
+                        f"{k}={v}"
+                        for k, v in sorted(val_report["breakout_type_distribution"].items(), key=lambda x: -x[1])
+                    ),
+                )
+            if val_report.get("session_distribution"):
+                logger.info(
+                    "Dataset sessions: %s",
+                    ", ".join(
+                        f"{k}={v}" for k, v in sorted(val_report["session_distribution"].items(), key=lambda x: -x[1])
+                    ),
+                )
+
+            if not val_report["valid"]:
+                error_summary = "; ".join(val_report["errors"])
+                _state.finish(
+                    error=f"Pre-training validation FAILED — cannot proceed with training: {error_summary}",
+                    result={
+                        "step": "pre_training_validation",
+                        "validation_report": val_report,
+                    },
+                )
+                return
+
+            # Validation passed — log any warnings
+            if val_report["warnings"]:
+                logger.warning(
+                    "Pre-training validation passed with %d warning(s) — training will proceed",
+                    len(val_report["warnings"]),
+                )
+
+            if val_report["fixes_applied"]:
+                logger.info(
+                    "Pre-training validation applied %d fix(es) to %s — dataset is now clean",
+                    len(val_report["fixes_applied"]),
+                    str(labels_csv),
+                )
 
         # ----- Train model -----
         if _state.cancel_requested:
@@ -1494,33 +1588,52 @@ async def cancel_train() -> JSONResponse:
 
 
 @app.get("/train/validate")
-async def validate_dataset_endpoint() -> JSONResponse:
-    """Validate the current dataset — check CSV rows vs images on disk.
+async def validate_dataset_endpoint(fix: bool = False) -> JSONResponse:
+    """Validate the current dataset — comprehensive pre-training checks.
 
-    Returns a report with:
-      - total_rows         : number of rows in labels.csv
-      - missing_images     : rows whose image_path file doesn't exist on disk
-      - empty_image_paths  : rows with a blank/NaN image_path value
-      - coverage_pct       : percentage of rows that DO have an image on disk
-      - label_distribution : count per label class
-      - symbols            : sorted list of symbols in the CSV
-      - valid              : False if CSV is missing or any images are absent
+    Runs the full ``validate_dataset_pre_training`` suite which checks:
+      - CSV existence and required columns
+      - Docker ``/app/`` path prefix issues (auto-fixed if ``fix=true``)
+      - Duplicate rows
+      - Missing images on disk
+      - Label balance and distribution
+      - Symbol coverage
+      - Breakout type and session distribution
+      - Feature range sanity (NaN/Inf detection)
+
+    Query parameters:
+        fix (bool): If true, auto-fix recoverable issues in-place
+                    (strip Docker prefixes, remove missing-image rows,
+                    deduplicate).  Default: false (read-only).
+
+    Returns a detailed report dict.  Status codes:
+      - 200 — dataset is valid, all checks passed
+      - 206 — dataset exists but has issues (warnings or fixable errors)
+      - 404 — labels.csv not found (dataset not yet generated)
     """
-    from lib.services.training.dataset_generator import validate_dataset
+    from lib.services.training.dataset_generator import validate_dataset_pre_training
 
     labels_csv_path = str(DATASET_DIR / "labels.csv")
-    report = validate_dataset(labels_csv_path, check_images=True)
+    report = validate_dataset_pre_training(
+        csv_path=labels_csv_path,
+        check_images=True,
+        auto_fix=fix,
+        min_total_rows=100,
+        max_missing_image_pct=5.0,
+        max_label_imbalance_ratio=2.5,
+        min_symbols=1,
+    )
 
+    # Add coverage_pct for backward compat with WebUI
     total = report.get("total_rows", 0)
     missing = report.get("missing_images", 0)
     coverage_pct = round(100.0 * (total - missing) / total, 1) if total else 0.0
     report["coverage_pct"] = coverage_pct
 
-    # 206 Partial Content when the CSV exists but images are missing;
-    # 200 when everything is healthy; 404 when CSV doesn't exist at all.
-    status_code = (
-        404 if report.get("error", "").startswith("CSV not found") else 206 if not report.get("valid") else 200
-    )
+    # 404 when CSV doesn't exist; 206 when issues found; 200 when clean.
+    errors = report.get("errors", [])
+    csv_missing = any("CSV not found" in e for e in errors)
+    status_code = 404 if csv_missing else 206 if not report.get("valid") else 200
 
     return JSONResponse(status_code=status_code, content=report)
 
@@ -1582,6 +1695,90 @@ async def repair_dataset_endpoint(params: TrainRequest | None = None) -> JSONRes
             "message": "Dataset repair started",
             "params": repair_params.model_dump(exclude_none=True),
         },
+    )
+
+
+@app.post("/dataset/wipe", dependencies=[Depends(verify_api_key)])
+async def wipe_dataset() -> JSONResponse:
+    """Wipe all dataset images and CSVs for a completely fresh start.
+
+    Deletes everything inside the dataset directory (images/, labels.csv,
+    train.csv, val.csv, dataset_stats.json) so the next training run
+    regenerates from scratch.
+
+    This is the API equivalent of ``scripts/wipe_dataset.sh`` — useful
+    when the dataset volume is a Docker named volume and you want to
+    reset without shell access.
+
+    Returns 409 if a training run is currently in progress.
+    """
+    if _state.is_busy():
+        return JSONResponse(
+            status_code=409,
+            content={"error": "Cannot wipe dataset while training is in progress"},
+        )
+
+    import glob
+
+    dataset_dir = str(DATASET_DIR)
+    removed_files = 0
+    removed_dirs = 0
+    freed_bytes = 0
+    errors: list[str] = []
+
+    # Remove CSV files
+    for pattern in ["*.csv", "*.json"]:
+        for filepath in glob.glob(os.path.join(dataset_dir, pattern)):
+            try:
+                size = os.path.getsize(filepath)
+                os.remove(filepath)
+                removed_files += 1
+                freed_bytes += size
+            except Exception as exc:
+                errors.append(f"Failed to remove {filepath}: {exc}")
+
+    # Remove all image files recursively
+    images_dir = os.path.join(dataset_dir, "images")
+    if os.path.isdir(images_dir):
+        for dirpath, dirnames, filenames in os.walk(images_dir, topdown=False):
+            for fname in filenames:
+                fpath = os.path.join(dirpath, fname)
+                try:
+                    size = os.path.getsize(fpath)
+                    os.remove(fpath)
+                    removed_files += 1
+                    freed_bytes += size
+                except Exception as exc:
+                    errors.append(f"Failed to remove {fpath}: {exc}")
+            # Remove empty subdirectories (per-symbol image dirs)
+            for dname in dirnames:
+                dpath = os.path.join(dirpath, dname)
+                try:
+                    os.rmdir(dpath)
+                    removed_dirs += 1
+                except OSError:
+                    pass  # not empty — skip
+
+    freed_mb = freed_bytes / (1024 * 1024)
+
+    logger.info(
+        "Dataset wipe complete — removed %d files, %d dirs, freed %.1f MB",
+        removed_files,
+        removed_dirs,
+        freed_mb,
+    )
+
+    if errors:
+        logger.warning("Dataset wipe had %d error(s): %s", len(errors), "; ".join(errors[:5]))
+
+    return JSONResponse(
+        {
+            "message": "Dataset wiped successfully",
+            "removed_files": removed_files,
+            "removed_dirs": removed_dirs,
+            "freed_mb": round(freed_mb, 1),
+            "errors": errors[:10],
+        }
     )
 
 

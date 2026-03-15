@@ -110,7 +110,7 @@ class SessionConcentration:
     """18:00–03:00 ET (Globex overnight / Asian / Sydney)."""
 
     london_pct: float = 0.0
-    """03:00–08:00 ET (London + Frankfurt)."""
+    """03:00–08:00 ET (London)."""
 
     us_pct: float = 0.0
     """08:00–16:00 ET (US pre-market + RTH)."""

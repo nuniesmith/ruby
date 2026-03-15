@@ -403,7 +403,6 @@ def _get_session_info() -> dict[str, str]:
       - Sydney / ASX:         18:30–02:00 (wraps midnight)
       - Tokyo / TSE:          19:00–02:25 (wraps midnight; lunch 22:30–23:30)
       - Shanghai / HK:        21:00–03:00 (wraps midnight)
-      - Frankfurt / Xetra:    03:00–11:30
       - London Open:          03:00–12:00  ← primary
       - London-NY Crossover:  08:00–10:00
       - US Equity Open:       09:30–16:00  ← primary
@@ -460,7 +459,7 @@ def _get_session_info() -> dict[str, str]:
         _tyo_open = _et("tokyo", "et_open", 20.0)
         _tyo_close = _et("tokyo", "et_close", 27.42) % 24  # normalise to 0-24
         _sha_open = _et("shanghai", "et_open", 21.5)
-        _fra_open = _et("frankfurt", "et_open", 3.0)
+        _lon_open = _et("london", "et_open", 3.0)
         _lon_close = _et("london", "et_close", 11.5)
         _us_open = _et("us", "et_open", 9.5)
         _us_close = _et("us", "et_close", 16.0)
@@ -472,7 +471,7 @@ def _get_session_info() -> dict[str, str]:
         _syd_open = 19.0
         _tyo_open, _tyo_close = 20.0, 3.42
         _sha_open = 21.5
-        _fra_open = 3.0
+        _lon_open = 3.0
         _lon_close = 11.5
         _us_open, _us_close = 9.5, 16.0
         _set_open, _set_close = 14.0, 14.5
@@ -530,20 +529,20 @@ def _get_session_info() -> dict[str, str]:
         label = "TOKYO OPEN"
         css_class = "text-indigo-400"
         color_hex = "#818cf8"
-    elif _sha_open <= fhour < 24.0 or 0.0 <= fhour < _fra_open:
+    elif _sha_open <= fhour < 24.0 or 0.0 <= fhour < _lon_open:
         # Shanghai open + Tokyo afternoon + pre-London overnight
         mode = "overnight"
         emoji = "🌙"
         label = "SHANGHAI / TOKYO" if fhour >= _sha_open else "TOKYO / LONDON PRE"
         css_class = "text-red-400" if fhour >= _sha_open else "text-indigo-400"
         color_hex = "#f87171" if fhour >= _sha_open else "#818cf8"
-    elif _tyo_close <= fhour < _fra_open:
+    elif _tyo_close <= fhour < _lon_open:
         mode = "overnight"
         emoji = "🌙"
         label = "PRE-LONDON"
         css_class = "text-purple-400"
         color_hex = "#c084fc"
-    elif _fra_open <= fhour < _us_open:
+    elif _lon_open <= fhour < _us_open:
         mode = "active"
         emoji = "🟢"
         label = "LONDON OPEN" if fhour < (_us_open - 1.5) else "LONDON-NY CROSSOVER"
@@ -637,15 +636,6 @@ def _get_session_hours() -> list[dict]:
                 "row": 1,
             },
             {
-                "key": "frankfurt",
-                "label": "FRA/Xetra",
-                "et_open": 3.0,
-                "et_close": 11.5,
-                "fg_hex": "#fde68a",
-                "bg_hex": "#1c1a08",
-                "row": 1,
-            },
-            {
                 "key": "london",
                 "label": "LON/LSE",
                 "et_open": 3.0,
@@ -693,7 +683,6 @@ def _get_orb_windows() -> list[tuple[str, float, float, str]]:
             ("sydney", "SYD ORB", "border-slate-400"),
             ("tokyo", "TYO ORB", "border-indigo-400"),
             ("shanghai", "SHA ORB", "border-red-400"),
-            ("frankfurt", "FRA/LON ORB", "border-blue-400"),
             ("london_ny", "LN-NY ORB", "border-indigo-400"),
             ("us", "US ORB", "border-emerald-400"),
             ("cme_settle", "CME Settle", "border-orange-400"),
@@ -716,7 +705,6 @@ def _get_orb_windows() -> list[tuple[str, float, float, str]]:
             ("SYD ORB", 18.5, 19.0, "border-slate-400"),
             ("TYO ORB", 19.0, 19.5, "border-indigo-400"),
             ("SHA ORB", 21.0, 21.5, "border-red-400"),
-            ("FRA/LON ORB", 3.0, 3.5, "border-blue-400"),
             ("LN-NY ORB", 8.0, 8.5, "border-indigo-400"),
             ("US ORB", 9.5, 10.0, "border-emerald-400"),
             ("CME Settle", 14.0, 14.5, "border-orange-400"),
@@ -843,7 +831,6 @@ def _render_session_strip() -> str:
                 <span><span class="inline-block w-2 h-2 rounded-sm mr-1" style="background:#1e293b;border:1px solid #94a3b844"></span>Sydney</span>
                 <span><span class="inline-block w-2 h-2 rounded-sm mr-1" style="background:#1e1b4b;border:1px solid #a5b4fc44"></span>Tokyo</span>
                 <span><span class="inline-block w-2 h-2 rounded-sm mr-1" style="background:#3b0a0a;border:1px solid #fca5a544"></span>Shanghai</span>
-                <span><span class="inline-block w-2 h-2 rounded-sm mr-1" style="background:#1c1a08;border:1px solid #fde68a44"></span>Frankfurt</span>
                 <span><span class="inline-block w-2 h-2 rounded-sm mr-1" style="background:#1e3a5f;border:1px solid #93c5fd44"></span>London</span>
                 <span><span class="inline-block w-2 h-2 rounded-sm mr-1" style="background:#052e16;border:1px solid #6ee7b744"></span>US</span>
                 <span><span class="inline-block w-2 h-2 rounded-sm mr-1" style="background:rgba(251,191,36,0.1);border:1px solid rgba(251,191,36,0.4)"></span>Overlap</span>
@@ -4725,7 +4712,6 @@ function updateClock() {{
         var _syd   = _sh('SYD/ASX');
         var _tyo   = _sh('TYO/TSE');
         var _sha   = _sh('SHA/SSE');
-        var _fra   = _sh('FRA/Xetra');
         var _lon   = _sh('LON/LSE');
         var _us    = _sh('US Equity');
         var _set   = _sh('CME Settle');
@@ -4758,15 +4744,15 @@ function updateClock() {{
         else if (_us  && etFrac>=_us.o      && etFrac<14.0)               {{ c=colors.us;     txt='🟢 US OPEN'; }}
         else if (_set && etFrac>=_set.o     && etFrac<_set.c)             {{ c='#fb923c'; txt='📊 CME SETTLEMENT'; }}
         else if (_us  && etFrac>=_set.c     && etFrac<_us.c)              {{ c=colors.us;     txt='🟢 US OPEN'; }}
-        else if (_lon && etFrac>=_fra.o     && etFrac<_us.o)              {{ c=colors.london; txt='🟢 LONDON OPEN'; }}
+        else if (_lon && etFrac>=_lon.o     && etFrac<_us.o)              {{ c=colors.london; txt='🟢 LONDON OPEN'; }}
         else if (_lon && etFrac>=_us.o      && etFrac<_ovL)               {{ c='#818cf8'; txt='🟢 LN-NY CROSSOVER'; }}
         else if (_cme && etFrac>=_us.c      && etFrac<_cme.o)             {{ c=colors.off;    txt='⚙️ OFF-HOURS'; }}
         else if (_cme && etFrac>=_cme.o     && etFrac<_cme.c)             {{ c='#2dd4bf'; txt='🔔 CME GLOBEX OPEN'; }}
         else if (_syd && etFrac>=_syd.o     && etFrac<_tyo.o)             {{ c='#94a3b8'; txt='🌙 SYDNEY OPEN'; }}
         else if (_tyo && etFrac>=_tyo.o     && etFrac<_sha.o)             {{ c='#a5b4fc'; txt='🌙 TOKYO OPEN'; }}
-        else if (_sha && (etFrac>=_sha.o    || etFrac<_fra.o))            {{ c='#fca5a5'; txt='🌙 SHANGHAI/TOKYO'; }}
+        else if (_sha && (etFrac>=_sha.o    || etFrac<_lon.o))            {{ c='#fca5a5'; txt='🌙 SHANGHAI/TOKYO'; }}
         else if (_tyo && etFrac>=0          && etFrac<(_tyo.c % 24))      {{ c='#a5b4fc'; txt='🌙 TOKYO / PRE-LONDON'; }}
-        else if (_fra && etFrac>=(_tyo.c%24)&& etFrac<_fra.o)             {{ c='#c084fc'; txt='🌙 PRE-LONDON'; }}
+        else if (_lon && etFrac>=(_tyo.c%24)&& etFrac<_lon.o)             {{ c='#c084fc'; txt='🌙 PRE-LONDON'; }}
         else                                                               {{ c=colors.off;    txt='⚙️ OFF-HOURS'; }}
         badge.innerHTML = txt;
         badge.style.color = c;
@@ -5328,7 +5314,6 @@ _SESSION_TABS: list[tuple[str, str]] = [
     ("sydney", "🇦🇺 SYD"),
     ("tokyo", "🇯🇵 TYO"),
     ("shanghai", "🇨🇳 SHA"),
-    ("frankfurt", "🇩🇪 FRA"),
     ("london", "🇬🇧 LON"),
     ("london_ny", "🌐 LN-NY"),
     ("us", "🇺🇸 US"),
@@ -5575,8 +5560,6 @@ def get_orb_history_html(
             sess_badge = '<span class="text-indigo-400 text-[10px]">🌐 LN-NY</span>'
         elif "london" in _sk_lower:
             sess_badge = '<span class="text-blue-400 text-[10px]">🇬🇧 LON</span>'
-        elif "frankfurt" in _sk_lower:
-            sess_badge = '<span class="text-yellow-400 text-[10px]">🇩🇪 FRA</span>'
         elif "tokyo" in _sk_lower:
             sess_badge = '<span class="text-red-300 text-[10px]">🇯🇵 TYO</span>'
         elif "shanghai" in _sk_lower:
@@ -5739,8 +5722,6 @@ def get_orb_history_html(
                 sess_badge2 = '<span class="text-indigo-400 text-[10px]">🌐 LN-NY</span>'
             elif "london" in _sk_lower2:
                 sess_badge2 = '<span class="text-blue-400 text-[10px]">🇬🇧 LON</span>'
-            elif "frankfurt" in _sk_lower2:
-                sess_badge2 = '<span class="text-yellow-400 text-[10px]">🇩🇪 FRA</span>'
             elif "tokyo" in _sk_lower2:
                 sess_badge2 = '<span class="text-red-300 text-[10px]">🇯🇵 TYO</span>'
             elif "shanghai" in _sk_lower2:

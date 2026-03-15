@@ -21,7 +21,7 @@ Session windows (ET wall-clock, Globex-day order):
   - **Pre-market (00:00–03:00 ET):**
       Compute daily focus once, run Grok morning briefing, prepare alerts.
   - **Active (03:00–12:00 ET):**
-      Frankfurt/Xetra (03:00), London Open (03:00–08:00),
+      London Open (03:00–08:00),
       London-NY Crossover (08:00–10:00), US Equity Open (09:30–11:00).
       Live Ruby recomputation every 5 min, Grok updates every 15 min.
   - **Off-hours / Afternoon (12:00–18:00 ET):**
@@ -81,8 +81,6 @@ class ActionType(StrEnum):
     # ── ORB session checks — fired every 2 min within scan windows ──────────
     # US Equity Open  09:30–11:00 ET
     CHECK_ORB = "check_orb"
-    # Frankfurt / Xetra Open  03:00–04:30 ET  (08:00 CET / 09:00 CEST)
-    CHECK_ORB_FRANKFURT = "check_orb_frankfurt"
     # London Open  03:00–05:00 ET  (primary session)
     CHECK_ORB_LONDON = "check_orb_london"
     # London–NY Crossover  08:00–10:00 ET
@@ -215,7 +213,7 @@ class ScheduleManager:
     The scheduler covers the full 24-hour Globex day starting at 18:00 ET:
       18:00–00:00 ET  EVENING   — overnight ORB checks (CME/Sydney/Tokyo/Shanghai)
       00:00–03:00 ET  PRE_MARKET — daily focus, Grok briefing, alert prep
-      03:00–12:00 ET  ACTIVE    — Frankfurt/London/LN-NY/US ORB + live recompute
+      03:00–12:00 ET  ACTIVE    — London/LN-NY/US ORB + live recompute
       12:00–18:00 ET  OFF_HOURS — CME settlement ORB, backfill, CNN, backtest
 
     Thread-safe: all state is read/written from a single engine thread.
@@ -227,7 +225,6 @@ class ScheduleManager:
     RISK_CHECK_INTERVAL = 60  # 1 min during active
     NO_TRADE_INTERVAL = 2 * 60  # 2 min during active
     ORB_CHECK_INTERVAL = 2 * 60  # US open          09:30–11:00 ET
-    ORB_FRANKFURT_CHECK_INTERVAL = 2 * 60  # Frankfurt/Xetra  03:00–04:30 ET
     ORB_LONDON_CHECK_INTERVAL = 2 * 60  # London open      03:00–05:00 ET
     ORB_LONDON_NY_CHECK_INTERVAL = 2 * 60  # London-NY cross  08:00–10:00 ET
     ORB_CME_CHECK_INTERVAL = 2 * 60  # CME Globex open  18:00–20:00 ET
@@ -280,7 +277,7 @@ class ScheduleManager:
         Globex-day boundaries (all ET, DST-aware via ZoneInfo):
           - Evening    18:00–00:00 ET  overnight ORB windows (CME/Sydney/Tokyo/Shanghai)
           - Pre-market 00:00–03:00 ET  daily focus + Grok briefing
-          - Active     03:00–12:00 ET  Frankfurt/London/LN-NY/US live trading
+          - Active     03:00–12:00 ET  London/LN-NY/US live trading
           - Off-hours  12:00–18:00 ET  CNN training, backfill, backtest, CME settle ORB
         """
         if now is None:
@@ -650,7 +647,6 @@ class ScheduleManager:
         """Active (03:00–12:00 ET): live recomputation + ORB + multi-type breakout checks.
 
         Sub-sessions within the active window (ET wall-clock):
-          - Frankfurt/Xetra  03:00–04:30 ET  (08:00 CET / 09:00 CEST)
           - London Open      03:00–05:00 ET  (primary ORB session)
           - London-NY Cross  08:00–10:00 ET
           - US Equity Open   09:30–11:00 ET
@@ -747,20 +743,6 @@ class ScheduleManager:
                 )
             )
 
-        # --- Frankfurt / Xetra Open ORB — every 2 min during 03:00–04:30 ET ---
-        # Xetra opens 08:00 CET (= 03:00 EST / 02:00 EDT) — fires at same ET
-        # time as London open, but uses frankfurt session asset list.
-        if _dt_time(3, 0) <= now_time <= _dt_time(4, 30) and self._interval_elapsed(
-            ActionType.CHECK_ORB_FRANKFURT, ts, self.ORB_FRANKFURT_CHECK_INTERVAL
-        ):
-            actions.append(
-                ScheduledAction(
-                    action=ActionType.CHECK_ORB_FRANKFURT,
-                    priority=6,
-                    description="Check Frankfurt/Xetra Open ORB (03:00–03:30 ET opening range)",
-                )
-            )
-
         # --- London Open ORB — every 2 min during 03:00–05:00 ET ---
         if _dt_time(3, 0) <= now_time <= _dt_time(5, 0) and self._interval_elapsed(
             ActionType.CHECK_ORB_LONDON, ts, self.ORB_LONDON_CHECK_INTERVAL
@@ -810,7 +792,7 @@ class ScheduleManager:
         #   - ASIAN fires only after 02:00 ET when range is complete
         #   - IB fires only after 10:30 ET
 
-        # -- Frankfurt/London window (03:00–05:00 ET) -- all types except IB --
+        # -- London window (03:00–05:00 ET) -- all types except IB --
         if _dt_time(3, 0) <= now_time <= _dt_time(5, 0) and self._interval_elapsed(
             ActionType.CHECK_BREAKOUT_MULTI, ts, self.BREAKOUT_MULTI_CHECK_INTERVAL
         ):

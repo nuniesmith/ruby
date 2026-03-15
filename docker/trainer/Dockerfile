@@ -85,8 +85,10 @@ COPY --from=deps /usr/local/bin /usr/local/bin
 COPY src/     ./src/
 COPY scripts/ ./scripts/
 
-# Persistent directories — bind-mounted from the host in compose so that
-# rsync can pull models/ directly without any docker cp / volume-export.
+# Persistent directories:
+#   /app/models  — bind-mounted from host for git tracking + rsync
+#   /app/dataset — named Docker volume (trainer_dataset), not in source control
+#   /app/data    — bind-mounted from host for local data cache
 RUN mkdir -p /app/data /app/models /app/models/archive /app/dataset
 
 # NVIDIA runtime — exposes the full GPU to PyTorch inside the container

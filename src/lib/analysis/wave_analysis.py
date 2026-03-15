@@ -78,23 +78,23 @@ ASSET_PARAMS: dict[str, dict[str, float | int]] = {
     "S&P": {"max_length": 18, "accel_multiplier": 0.01, "lookback_period": 150},
     "Nasdaq": {"max_length": 15, "accel_multiplier": 0.01, "lookback_period": 150},
     "Russell 2000": {"max_length": 18, "accel_multiplier": 0.012, "lookback_period": 150},
-    "Dow Jones": {"max_length": 18, "accel_multiplier": 0.01, "lookback_period": 150},
+    "Dow Jones": {"max_length": 18, "accel_multiplier": 0.01, "lookback_period": 365},
     # ── FX futures ──────────────────────────────────────────────────────────
-    "Euro FX": {"max_length": 18, "accel_multiplier": 0.008, "lookback_period": 180},
-    "British Pound": {"max_length": 18, "accel_multiplier": 0.008, "lookback_period": 180},
-    "Japanese Yen": {"max_length": 18, "accel_multiplier": 0.008, "lookback_period": 180},
-    "Australian Dollar": {"max_length": 18, "accel_multiplier": 0.008, "lookback_period": 180},
-    "Canadian Dollar": {"max_length": 18, "accel_multiplier": 0.008, "lookback_period": 180},
-    "Swiss Franc": {"max_length": 18, "accel_multiplier": 0.008, "lookback_period": 180},
+    "Euro FX": {"max_length": 18, "accel_multiplier": 0.008, "lookback_period": 365},
+    "British Pound": {"max_length": 18, "accel_multiplier": 0.008, "lookback_period": 365},
+    "Japanese Yen": {"max_length": 18, "accel_multiplier": 0.008, "lookback_period": 365},
+    "Australian Dollar": {"max_length": 18, "accel_multiplier": 0.008, "lookback_period": 365},
+    "Canadian Dollar": {"max_length": 18, "accel_multiplier": 0.008, "lookback_period": 365},
+    "Swiss Franc": {"max_length": 18, "accel_multiplier": 0.008, "lookback_period": 365},
     # ── Interest rate futures ────────────────────────────────────────────────
-    "10Y T-Note": {"max_length": 22, "accel_multiplier": 0.006, "lookback_period": 200},
-    "30Y T-Bond": {"max_length": 22, "accel_multiplier": 0.006, "lookback_period": 200},
+    "10Y T-Note": {"max_length": 22, "accel_multiplier": 0.006, "lookback_period": 365},
+    "30Y T-Bond": {"max_length": 22, "accel_multiplier": 0.006, "lookback_period": 365},
     # ── Agricultural futures ─────────────────────────────────────────────────
-    "Corn": {"max_length": 20, "accel_multiplier": 0.018, "lookback_period": 180},
-    "Soybeans": {"max_length": 20, "accel_multiplier": 0.018, "lookback_period": 180},
-    "Wheat": {"max_length": 20, "accel_multiplier": 0.020, "lookback_period": 180},
+    "Corn": {"max_length": 20, "accel_multiplier": 0.018, "lookback_period": 365},
+    "Soybeans": {"max_length": 20, "accel_multiplier": 0.018, "lookback_period": 365},
+    "Wheat": {"max_length": 20, "accel_multiplier": 0.020, "lookback_period": 365},
     # ── CME crypto futures ───────────────────────────────────────────────────
-    "Micro Bitcoin": {"max_length": 14, "accel_multiplier": 0.030, "lookback_period": 120},
+    "Micro Bitcoin": {"max_length": 14, "accel_multiplier": 0.030, "lookback_period": 365},
     "Micro Ether": {"max_length": 14, "accel_multiplier": 0.030, "lookback_period": 120},
     # ── Kraken spot crypto (24/7) ────────────────────────────────────────────
     "BTC/USD": {"max_length": 12, "accel_multiplier": 0.035, "lookback_period": 120},
@@ -196,13 +196,13 @@ def resolve_asset_params(
         return {"max_length": 14, "accel_multiplier": 0.030, "lookback_period": 120}
     if any(probe.startswith(p) for p in ("6E", "6B", "6J", "6A", "6C", "6S", "M6")):
         # FX futures
-        return {"max_length": 18, "accel_multiplier": 0.008, "lookback_period": 180}
+        return {"max_length": 18, "accel_multiplier": 0.008, "lookback_period": 365}
     if any(probe.startswith(p) for p in ("ZN", "ZB", "ZF", "ZT")):
         # Rates
         return {"max_length": 22, "accel_multiplier": 0.006, "lookback_period": 200}
     if any(probe.startswith(p) for p in ("ZC", "ZS", "ZW", "ZL", "ZM")):
         # Ags
-        return {"max_length": 20, "accel_multiplier": 0.018, "lookback_period": 180}
+        return {"max_length": 20, "accel_multiplier": 0.018, "lookback_period": 365}
     if any(probe.startswith(p) for p in ("MES", "MNQ", "M2K", "MYM", "ES", "NQ", "RTY", "YM")):
         # Equity index
         return {"max_length": 18, "accel_multiplier": 0.010, "lookback_period": 150}

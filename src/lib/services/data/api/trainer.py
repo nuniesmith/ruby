@@ -919,7 +919,7 @@ function renderStatus(s) {
   // Config defaults (once)
   if (s.config && !document.getElementById('c-epochs').dataset.set) {
     document.getElementById('c-epochs').value = s.config.default_epochs    || 60;
-    document.getElementById('c-days').value   = s.config.default_days_back || 180;
+    document.getElementById('c-days').value   = s.config.default_days_back || 365;
     if (s.config.default_session) document.getElementById('c-session').value = s.config.default_session;
     document.getElementById('c-epochs').dataset.set = '1';
   }

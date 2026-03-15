@@ -466,7 +466,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         epilog="""
 Examples:
   python scripts/train_offline.py --check-only
-  python scripts/train_offline.py --symbols MGC,MES,MNQ --days 180
+  python scripts/train_offline.py --symbols MGC,MES,MNQ --days 365
   python scripts/train_offline.py --data-url http://myserver:8000 --train
   python scripts/train_offline.py --symbols ALL --output-dir dataset_full
         """,

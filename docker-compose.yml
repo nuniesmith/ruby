@@ -165,7 +165,7 @@ services:
             - PYTHONUNBUFFERED=1
             # Backfill chunk size — increase to 30 when MASSIVE_API_KEY is set
             # to reduce round-trips on long initial fills (5 days default is
-            # safe for yfinance but causes ~36 chunks for a 180-day Massive fill).
+            # safe for yfinance but causes ~36 chunks for a 365-day Massive fill).
             - BACKFILL_CHUNK_DAYS=${BACKFILL_CHUNK_DAYS:-5}
             - CHARTING_SERVICE_URL=http://charting:8003
         volumes:
@@ -429,7 +429,7 @@ services:
             # backfill so subsequent training runs hit the warm cache.
             # ----------------------------------------------------------------
             - CNN_RETRAIN_SYMBOLS=${CNN_RETRAIN_SYMBOLS:-MGC,SIL,MES,MNQ,M2K,MYM,ZN,ZB,ZW}
-            - CNN_RETRAIN_DAYS_BACK=${CNN_RETRAIN_DAYS_BACK:-180}
+            - CNN_RETRAIN_DAYS_BACK=${CNN_RETRAIN_DAYS_BACK:-365}
             # "engine" routes all bar requests through the data service
             # (http://data:8000), which handles Redis/Postgres caching and
             # Massive/Kraken API calls.  This is the correct mode when the
@@ -451,12 +451,14 @@ services:
             - NVIDIA_DRIVER_CAPABILITIES=compute,utility
 
         volumes:
-            # Bind-mounts — files land directly on the host so rsync can
-            # pull models/ without any docker cp / volume-export dance.
-            # The host directories are created automatically by Docker Compose
-            # if they don't already exist.
+            # Models — bind-mount so champion .pt files are visible on the
+            # host for git tracking and rsync to the production server.
             - ./models:/app/models
-            - ./dataset:/app/dataset
+            # Dataset — named volume for generated images + CSVs.
+            # Easy to wipe:  docker volume rm ruby_trainer_dataset
+            # Not in source control — regenerated from the pipeline.
+            - trainer_dataset:/app/dataset
+            # Data & source — bind-mounts for live development.
             - ./data:/app/data
             - ./scripts:/app/scripts
             - ./src:/app/src
@@ -538,6 +540,7 @@ volumes:
     app_data:
     prometheus_data:
     grafana_data:
+    trainer_dataset:
 
 # =============================================================================
 # Build notes

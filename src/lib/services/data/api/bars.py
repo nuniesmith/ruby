@@ -1300,7 +1300,7 @@ def get_bars(
             #   The ``filling`` flag signals that fresher data will arrive.
             #
             # This prevents the trainer from timing out when the engine needs
-            # to run a long multi-chunk backfill (e.g. 180 days × 36 chunks).
+            # to run a long multi-chunk backfill (e.g. 365 days × 36 chunks).
             existing_count = _bar_count(symbol, interval)
             if existing_count > 0:
                 # Stale data present — return it immediately, fill in background

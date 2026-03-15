@@ -758,7 +758,7 @@ DEFAULT_THRESHOLD = 0.82
 # thinner markets and noisier price action than the primary London / US
 # sessions, so we require lower confidence to avoid over-filtering the
 # smaller signal pool while still maintaining signal quality.  Daytime
-# sessions (Frankfurt, London, London-NY, US, CME Settlement) keep the
+# sessions (London, London-NY, US, CME Settlement) keep the
 # full 0.82 bar.
 #
 # These are *starting* values — tune after 2 weeks of paper-trade data
@@ -773,7 +773,6 @@ SESSION_THRESHOLDS: dict[str, float] = {
     "tokyo": 0.74,  # Tokyo/TSE 19:00 ET — narrow range, metals/JPY
     "shanghai": 0.74,  # Shanghai/HK 21:00 ET — copper/gold driver
     # ── Primary daytime sessions ────────────────────────────────────────
-    "frankfurt": 0.80,  # Frankfurt/Xetra 03:00 ET — pre-London, good vol
     "london": 0.82,  # London Open 03:00 ET — PRIMARY, highest conviction
     "london_ny": 0.82,  # London-NY Crossover 08:00 ET — highest volume
     "us": 0.82,  # US Equity Open 09:30 ET — classic ORB session
@@ -817,18 +816,17 @@ def get_session_threshold(session_key: str | None) -> float:
 #
 # Ordered chronologically within the Globex day (18:00 ET start):
 #   cme(18:00) → sydney(18:30) → tokyo(19:00) → shanghai(21:00) →
-#   frankfurt(03:00) → london(03:00) → london_ny(08:00) →
+#   london(03:00) → london_ny(08:00) →
 #   us(09:30) → cme_settle(14:00)
 SESSION_ORDINAL: dict[str, float] = {
-    "cme": 0.0 / 8,  # 18:00 ET — position 0
-    "sydney": 1.0 / 8,  # 18:30 ET — position 1
-    "tokyo": 2.0 / 8,  # 19:00 ET — position 2
-    "shanghai": 3.0 / 8,  # 21:00 ET — position 3
-    "frankfurt": 4.0 / 8,  # 03:00 ET — position 4
-    "london": 5.0 / 8,  # 03:00 ET — position 5
-    "london_ny": 6.0 / 8,  # 08:00 ET — position 6
-    "us": 7.0 / 8,  # 09:30 ET — position 7
-    "cme_settle": 8.0 / 8,  # 14:00 ET — position 8
+    "cme": 0.0 / 7,  # 18:00 ET — position 0
+    "sydney": 1.0 / 7,  # 18:30 ET — position 1
+    "tokyo": 2.0 / 7,  # 19:00 ET — position 2
+    "shanghai": 3.0 / 7,  # 21:00 ET — position 3
+    "london": 4.0 / 7,  # 03:00 ET — position 4
+    "london_ny": 5.0 / 7,  # 08:00 ET — position 5
+    "us": 6.0 / 7,  # 09:30 ET — position 6
+    "cme_settle": 7.0 / 7,  # 14:00 ET — position 7
 }
 
 # Backward-compat aliases so old callers that pass session_flag=1.0 (US)

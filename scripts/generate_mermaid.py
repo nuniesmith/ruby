@@ -46,7 +46,7 @@ MERMAID = """flowchart TD
     subgraph Scheduler["⏰ ScheduleManager  (services/engine/scheduler.py)"]
         I1["EVENING  18:00–00:00 ET\nCME, Sydney, Tokyo,\nShanghai ORB sessions"]
         I2["PRE_MARKET  00:00–03:00 ET\nCOMPUTE_DAILY_FOCUS\nGROK_MORNING_BRIEF\nCHECK_NEWS_SENTIMENT 07:00 ET\nPREP_ALERTS"]
-        I3["ACTIVE  03:00–12:00 ET\nFrankfurt, London, LN-NY,\nUS Open ORB + multi-type scans\nRUBY_RECOMPUTE every 5 min\nGROK_LIVE_UPDATE every 15 min\nCHECK_RISK_RULES + CHECK_NO_TRADE\nCHECK_SWING every 2 min\nCHECK_ORB_CME_SETTLE 14:00–15:30 ET\nPOSITION_CLOSE_WARNING 15:45 ET\nEOD_POSITION_CLOSE 16:00 ET"]
+        I3["ACTIVE  03:00–12:00 ET\nLondon, LN-NY,\nUS Open ORB + multi-type scans\nRUBY_RECOMPUTE every 5 min\nGROK_LIVE_UPDATE every 15 min\nCHECK_RISK_RULES + CHECK_NO_TRADE\nCHECK_SWING every 2 min\nCHECK_ORB_CME_SETTLE 14:00–15:30 ET\nPOSITION_CLOSE_WARNING 15:45 ET\nEOD_POSITION_CLOSE 16:00 ET"]
         I4["OFF_HOURS  12:00–18:00 ET\nHISTORICAL_BACKFILL\nRUN_OPTIMIZATION\nRUN_BACKTEST\nGENERATE_CHART_DATASET\nTRAIN_BREAKOUT_CNN\nDAILY_REPORT\nCHECK_NEWS_SENTIMENT_MIDDAY\nNEXT_DAY_PREP"]
     end
 
@@ -83,13 +83,12 @@ nSwingDetector candidates\n(trading/strategies/daily/swing_detector.py)"]
         U2["CHECK_ORB_SYDNEY  18:30–20:30 ET"]
         U3["CHECK_ORB_TOKYO  19:00–21:00 ET"]
         U4["CHECK_ORB_SHANGHAI  21:00–23:00 ET"]
-        U5["CHECK_ORB_FRANKFURT  03:00–04:30 ET"]
-        U6["CHECK_ORB_LONDON  03:00–05:00 ET"]
-        U7["CHECK_ORB_LONDON_NY  08:00–10:00 ET"]
-        U8["CHECK_ORB  09:30–11:00 ET  (US open)"]
-        U9["CHECK_ORB_CME_SETTLE  14:00–15:30 ET\n(metals/energy settlement)"]
-        U10["CHECK_ORB_CRYPTO_UTC0 / UTC12\nBTC/ETH/SOL crypto windows"]
-        U11["CHECK_BREAKOUT_MULTI  every 2 min\nPDR · IB · Consolidation +\n9 additional types in parallel\n(handle_breakout_multi)\nSession assets via ORBSession\n(trading/strategies/rb/open/sessions.py)"]
+        U5["CHECK_ORB_LONDON  03:00–05:00 ET"]
+        U6["CHECK_ORB_LONDON_NY  08:00–10:00 ET"]
+        U7["CHECK_ORB  09:30–11:00 ET  (US open)"]
+        U8["CHECK_ORB_CME_SETTLE  14:00–15:30 ET\n(metals/energy settlement)"]
+        U9["CHECK_ORB_CRYPTO_UTC0 / UTC12\nBTC/ETH/SOL crypto windows"]
+        U10["CHECK_BREAKOUT_MULTI  every 2 min\nPDR · IB · Consolidation +\n9 additional types in parallel\n(handle_breakout_multi)\nSession assets via ORBSession\n(trading/strategies/rb/open/sessions.py)"]
     end
 
     %% ==================== SIGNAL QUALITY & CONFLUENCE ====================

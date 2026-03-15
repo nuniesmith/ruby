@@ -193,31 +193,7 @@ SHANGHAI_SESSION = ORBSession(
 )
 
 # ---------------------------------------------------------------------------
-# 5. Frankfurt / Xetra Open  03:00–03:30 ET  (08:00–08:30 CET / 09:00 CEST)
-# Pre-London institutional flow; DAX-correlated index futures and EUR/USD.
-# Same ET time as London open — separate session key for asset filtering.
-# ---------------------------------------------------------------------------
-FRANKFURT_SESSION = ORBSession(
-    name="Frankfurt/Xetra Open",
-    key="frankfurt",
-    or_start=dt_time(3, 0),
-    or_end=dt_time(3, 30),
-    scan_end=dt_time(4, 30),
-    atr_period=14,
-    breakout_multiplier=0.45,
-    min_bars=4,
-    max_bars=35,
-    description=("Frankfurt / Xetra open (03:00–03:30 ET / 08:00–08:30 UTC EST | 07:00–07:30 UTC EDT)"),
-    min_depth_atr_pct=0.12,
-    min_body_ratio=0.52,
-    max_or_atr_ratio=1.7,
-    min_or_atr_ratio=0.04,
-    wraps_midnight=False,
-    include_in_dataset=True,
-)
-
-# ---------------------------------------------------------------------------
-# 6. London Open  03:00–03:30 ET  (08:00–08:30 UTC)  ← PRIMARY SESSION
+# 5. London Open  03:00–03:30 ET  (08:00–08:30 UTC)  ← PRIMARY SESSION
 # Highest-conviction session.  Institutional flow drives the daily range
 # for metals, energy, FX futures, and index futures.
 # ---------------------------------------------------------------------------
@@ -368,7 +344,6 @@ ORB_SESSIONS: list[ORBSession] = [
     SYDNEY_SESSION,  # 18:30 ET
     TOKYO_SESSION,  # 19:00 ET
     SHANGHAI_SESSION,  # 21:00 ET
-    FRANKFURT_SESSION,  # 03:00 ET — pre-London
     LONDON_SESSION,  # 03:00 ET — primary
     LONDON_NY_SESSION,  # 08:00 ET
     US_SESSION,  # 09:30 ET

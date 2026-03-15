@@ -1,5 +1,5 @@
 """
-Multi-Session Support — All 9 Globex Sessions with Bracket Parameters
+Multi-Session Support — All 8 Globex Sessions with Bracket Parameters
 =======================================================================
 Single source of truth for every session used by the ``rb`` platform.
 Both the Python dataset generator / CNN pipeline **and** the
@@ -16,11 +16,10 @@ Sessions defined (chronological Globex-day order, 18:00 ET start):
   2. ``sydney``     — Sydney / ASX            18:30–19:00 ET
   3. ``tokyo``      — Tokyo / TSE             19:00–19:30 ET
   4. ``shanghai``   — Shanghai / HK           21:00–21:30 ET
-  5. ``frankfurt``  — Frankfurt / Xetra       03:00–03:30 ET
-  6. ``london``     — London Open             03:00–03:30 ET
-  7. ``london_ny``  — London-NY Crossover     08:00–08:30 ET
-  8. ``us``         — US Equity Open          09:30–10:00 ET
-  9. ``cme_settle`` — CME Settlement          14:00–14:30 ET
+  5. ``london``     — London Open             03:00–03:30 ET
+  6. ``london_ny``  — London-NY Crossover     08:00–08:30 ET
+  7. ``us``         — US Equity Open          09:30–10:00 ET
+  8. ``cme_settle`` — CME Settlement          14:00–14:30 ET
 
 Each session carries:
   - Open/close time for the opening range window (ET)
@@ -77,7 +76,6 @@ ALL_SESSION_KEYS: list[str] = [
     "sydney",  # 18:30–19:00 ET
     "tokyo",  # 19:00–19:30 ET
     "shanghai",  # 21:00–21:30 ET
-    "frankfurt",  # 03:00–03:30 ET
     "london",  # 03:00–03:30 ET  (primary)
     "london_ny",  # 08:00–08:30 ET
     "us",  # 09:30–10:00 ET  (primary)
@@ -248,28 +246,6 @@ _SHANGHAI_SESSION = ORBSession(
     },
 )
 
-_FRANKFURT_SESSION = ORBSession(
-    key="frankfurt",
-    display_name="Frankfurt / Xetra",
-    or_start=dt_time(3, 0),
-    or_end=dt_time(3, 30),
-    pm_end=dt_time(3, 0),
-    wraps_midnight=False,
-    is_overnight=False,
-    sl_atr_mult=1.5,
-    tp1_atr_mult=2.0,
-    tp2_atr_mult=3.0,
-    max_hold_bars=120,
-    cnn_threshold=0.80,
-    session_ordinal=4.0 / 8.0,  # 0.500
-    applies_to=["fx", "equity_index"],
-    description="Frankfurt / Xetra open at 03:00 ET — pre-London, good volume on EUR pairs.",
-    extra={
-        "active_pairs": ["6E=F", "6B=F", "MES=F"],
-        "pre_london": True,
-    },
-)
-
 _LONDON_SESSION = ORBSession(
     key="london",
     display_name="London Open",
@@ -288,7 +264,6 @@ _LONDON_SESSION = ORBSession(
     description="London Open at 03:00 ET — PRIMARY session, highest volume and conviction.",
     extra={
         "primary_session": True,
-        "overlaps_frankfurt": True,
     },
 )
 
@@ -370,7 +345,6 @@ SESSION_BY_KEY: dict[str, ORBSession] = {
     "sydney": _SYDNEY_SESSION,
     "tokyo": _TOKYO_SESSION,
     "shanghai": _SHANGHAI_SESSION,
-    "frankfurt": _FRANKFURT_SESSION,
     "london": _LONDON_SESSION,
     "london_ny": _LONDON_NY_SESSION,
     "us": _US_SESSION,
@@ -399,7 +373,7 @@ SESSION_BY_KEY: dict[str, ORBSession] = {
 #
 # NOTE: CME, Sydney, Tokyo, Shanghai times are all defined in ET wall-clock in
 # the ORBSession objects above (they follow US DST, since CME is Chicago-based).
-# Frankfurt and London are fixed UTC — they DO shift relative to ET when DST
+# London is fixed UTC — it DOES shift relative to ET when DST
 # transitions happen on different dates in the US vs Europe.
 #
 # Full exchange hours (UTC, no DST):
@@ -410,10 +384,6 @@ SESSION_BY_KEY: dict[str, ORBSession] = {
 #   Tokyo / TSE     :  00:00 – 06:25 UTC  (09:00–15:25 JST, UTC+9, no DST)
 #                      Lunch break 02:30–03:30 UTC (11:30–12:30 JST)
 #   Shanghai / SSE  :  01:30 – 07:00 UTC  (09:30–15:00 CST, UTC+8, no DST)
-#   Frankfurt/Xetra :  08:00 – 16:30 UTC  (09:00–17:30 CET=UTC+1 / CEST=UTC+2)
-#                      During CET  (winter): open=08:00, close=16:30 UTC
-#                      During CEST (summer): open=07:00, close=15:30 UTC
-#                      Europe switches ~last Sun Mar → last Sun Oct
 #   London / LSE    :  08:00 – 16:30 UTC  (08:00–16:30 GMT / 07:00–15:30 BST)
 #                      During GMT  (winter): open=08:00, close=16:30 UTC
 #                      During BST  (summer): open=07:00, close=15:30 UTC
@@ -518,19 +488,8 @@ _EXCHANGE_HOURS_UTC: list[dict] = [
         "note": "CST=UTC+8, no DST.",
     },
     # ── European sessions ──
-    # Frankfurt and London share the same UTC hours (both CET/BST align with GMT/CET).
     # During EU summer time (CEST/BST) the UTC open is 07:00 instead of 08:00.
     # We compute the correct UTC open dynamically in exchange_hours_in_et().
-    {
-        "key": "frankfurt",
-        "label": "FRA/Xetra",
-        "utc_open": 8.0,  # 09:00 CET (UTC+1); 07:00 UTC during CEST (UTC+2)
-        "utc_close": 16.5,  # 17:30 CET = 16:30 UTC; 15:30 UTC during CEST
-        "fg_hex": "#fde68a",
-        "bg_hex": "#1c1a08",
-        "row": 1,
-        "note": "CET=UTC+1 (Oct–Mar), CEST=UTC+2 (Mar–Oct). Open shifts 1h earlier in CEST.",
-    },
     {
         "key": "london",
         "label": "LON/LSE",
@@ -591,9 +550,8 @@ def exchange_hours_in_et() -> list[dict]:
     (``ZoneInfo("America/New_York")``), so it is always correct for both
     EDT (UTC-4, summer) and EST (UTC-5, winter) without any hardcoded offsets.
 
-    European sessions (Frankfurt, London) additionally account for the
-    EU DST schedule (CET/CEST, GMT/BST) which transitions on different dates
-    than the US schedule.
+    The London session additionally accounts for the EU DST schedule
+    (GMT/BST) which transitions on different dates than the US schedule.
 
     ET-anchored sessions (CME, Sydney, Tokyo, Shanghai, US Equity, CME
     Settlement) are taken directly from the ORBSession ``or_start``/``or_end``
@@ -723,27 +681,8 @@ def exchange_hours_in_et() -> list[dict]:
         }
     )
 
-    # Frankfurt / Xetra: 09:00–17:30 local (CET=UTC+1 or CEST=UTC+2)
-    fra_open_utc = 9.0 - eu_offset  # 08:00 UTC (CET) or 07:00 UTC (CEST)
-    fra_close_utc = 17.5 - eu_offset  # 16:30 UTC (CET) or 15:30 UTC (CEST)
-    fra_open_et = fra_open_utc + et_offset
-    fra_close_et = fra_close_utc + et_offset
-    result.append(
-        {
-            "key": "frankfurt",
-            "label": "FRA/Xetra",
-            "et_open": fra_open_et,
-            "et_close": fra_close_et,
-            "fg_hex": "#fde68a",
-            "bg_hex": "#1c1a08",
-            "row": 1,
-            "note": f"Xetra 09:00–17:30 local (CET/CEST=UTC+{eu_offset}). "
-            f"Opens {fra_open_et:.4g}h ET, closes {fra_close_et:.4g}h ET.",
-        }
-    )
-
     # London / LSE: 08:00–16:30 local (GMT=UTC+0 or BST=UTC+1)
-    # BST offset = eu_offset - 1 (London is always 1h behind Frankfurt)
+    # BST offset = eu_offset - 1 (London is always 1h behind CET)
     bst_offset = eu_offset - 1  # 0 (GMT winter) or 1 (BST summer)
     lon_open_utc = 8.0 - bst_offset  # 08:00 UTC (GMT) or 07:00 UTC (BST)
     lon_close_utc = 16.5 - bst_offset  # 16:30 UTC (GMT) or 15:30 UTC (BST)
@@ -880,7 +819,7 @@ def sessions_for_asset_class(asset_class: str) -> list[ORBSession]:
 
         >>> from multi_session import sessions_for_asset_class
         >>> [s.key for s in sessions_for_asset_class("metals")]
-        ['sydney', 'tokyo', 'shanghai', 'frankfurt', 'london', 'london_ny', 'us', 'cme_settle']
+        ['sydney', 'tokyo', 'shanghai', 'london', 'london_ny', 'us', 'cme_settle']
     """
     _ac = asset_class.strip().lower()
     return [s for s in all_sessions() if "all" in s.applies_to or _ac in s.applies_to]

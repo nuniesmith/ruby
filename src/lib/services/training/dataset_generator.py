@@ -118,9 +118,8 @@ class DatasetConfig:
     # Supported values:
     #   "us"        — US Equity Open 09:30–10:00 ET (default)
     #   "london"    — London Open 03:00–03:30 ET
-    #   "all"       — All 9 sessions across the full Globex day (recommended
+    #   "all"       — All 8 sessions across the full Globex day (recommended
     #                 for maximum dataset diversity and coverage)
-    #   "frankfurt" — Frankfurt/Xetra 03:00–03:30 ET
     #   "tokyo"     — Tokyo/TSE 19:00–19:30 ET (overnight)
     #   "shanghai"  — Shanghai/HK 21:00–21:30 ET (overnight)
     #   "cme"       — CME Globex re-open 18:00–18:30 ET (overnight)
@@ -1154,8 +1153,6 @@ def _get_session_bracket_params() -> dict[str, Any]:
         "tokyo": (dt_time(19, 0), dt_time(19, 30), dt_time(19, 0)),
         # Shanghai / HK  21:00–21:30 ET  (overnight, wraps_midnight)
         "shanghai": (dt_time(21, 0), dt_time(21, 30), dt_time(21, 0)),
-        # Frankfurt / Xetra  03:00–03:30 ET
-        "frankfurt": (dt_time(3, 0), dt_time(3, 30), dt_time(3, 0)),
         # London Open  03:00–03:30 ET  (primary session)
         "london": (dt_time(3, 0), dt_time(3, 30), dt_time(3, 0)),
         # London-NY Crossover  08:00–08:30 ET
@@ -1173,7 +1170,6 @@ _ALL_SESSION_KEYS: list[str] = [
     "sydney",
     "tokyo",
     "shanghai",
-    "frankfurt",
     "london",
     "london_ny",
     "us",
@@ -1190,8 +1186,7 @@ def _bracket_configs_for_session(
 
     - ``"us"``        → US Equity Open only (OR 09:30–10:00 ET)
     - ``"london"``    → London Open only (OR 03:00–03:30 ET)
-    - ``"all"``       → All 9 sessions across the full Globex day
-    - ``"frankfurt"`` → Frankfurt/Xetra only (OR 03:00–03:30 ET)
+    - ``"all"``       → All 8 sessions across the full Globex day
     - ``"tokyo"``     → Tokyo/TSE only (OR 19:00–19:30 ET)
     - ``"shanghai"``  → Shanghai/HK only (OR 21:00–21:30 ET)
     - ``"cme"``       → CME Globex re-open only (OR 18:00–18:30 ET)
@@ -1221,7 +1216,7 @@ def _bracket_configs_for_session(
     session = cfg.orb_session.lower().strip()
 
     if session == "all":
-        # Full Globex-day coverage — all 9 sessions
+        # Full Globex-day coverage — all 8 sessions
         return [(key, _make_cfg(key)) for key in _ALL_SESSION_KEYS]
     elif session in session_params:
         return [(session, _make_cfg(session))]
@@ -3095,6 +3090,353 @@ def validate_dataset(csv_path: str, check_images: bool = True) -> dict[str, Any]
 
 
 # ---------------------------------------------------------------------------
+# Comprehensive pre-training dataset validation gate
+# ---------------------------------------------------------------------------
+
+
+def validate_dataset_pre_training(
+    csv_path: str,
+    *,
+    check_images: bool = True,
+    auto_fix: bool = True,
+    min_total_rows: int = 500,
+    max_missing_image_pct: float = 5.0,
+    max_label_imbalance_ratio: float = 2.0,
+    min_symbols: int = 1,
+    max_duplicate_pct: float = 1.0,
+) -> dict[str, Any]:
+    """Comprehensive dataset validation gate that runs before training.
+
+    This function is designed to catch every known dataset issue before
+    burning GPU hours on a training run.  It validates structure, images,
+    label balance, duplicates, feature sanity, and optionally auto-fixes
+    recoverable problems (Docker path prefixes, stale rows with missing
+    images).
+
+    Args:
+        csv_path: Path to the dataset CSV (labels.csv, train.csv, or val.csv).
+        check_images: If True, verify every image_path exists on disk.
+        auto_fix: If True, attempt to fix recoverable issues in-place:
+                  - Strip ``/app/`` Docker prefix from image paths
+                  - Remove rows whose images are missing after path fix
+                  - Remove duplicate rows (by image_path, keep last)
+        min_total_rows: Minimum rows required to proceed with training.
+        max_missing_image_pct: Maximum % of rows with missing images before
+                               failing (after auto-fix, if enabled).
+        max_label_imbalance_ratio: Maximum ratio between the most-frequent
+                                   and least-frequent label counts.  E.g. 2.0
+                                   means the largest label can be at most 2×
+                                   the smallest.
+        min_symbols: Minimum number of unique symbols required.
+        max_duplicate_pct: Maximum % of duplicate image_path rows allowed.
+
+    Returns:
+        A report dict with keys:
+          - ``valid`` (bool): True if the dataset passed all gates.
+          - ``errors`` (list[str]): Hard failures that block training.
+          - ``warnings`` (list[str]): Soft issues logged but not blocking.
+          - ``fixes_applied`` (list[str]): Auto-fix actions taken.
+          - ``total_rows`` (int): Row count (after fixes).
+          - ``usable_rows`` (int): Rows with valid images on disk.
+          - ``label_distribution`` (dict): Label → count.
+          - ``symbol_distribution`` (dict): Symbol → count.
+          - ``breakout_type_distribution`` (dict): Breakout type → count.
+          - ``session_distribution`` (dict): Session key → count.
+          - ``missing_images`` (int): Count of rows without images on disk.
+          - ``duplicates_removed`` (int): Count of duplicate rows removed.
+          - ``paths_fixed`` (int): Count of Docker-prefixed paths corrected.
+    """
+    report: dict[str, Any] = {
+        "valid": True,
+        "errors": [],
+        "warnings": [],
+        "fixes_applied": [],
+        "total_rows": 0,
+        "usable_rows": 0,
+        "label_distribution": {},
+        "symbol_distribution": {},
+        "breakout_type_distribution": {},
+        "session_distribution": {},
+        "missing_images": 0,
+        "duplicates_removed": 0,
+        "paths_fixed": 0,
+    }
+
+    # ── 1. File existence ─────────────────────────────────────────────────
+    if not os.path.isfile(csv_path):
+        report["valid"] = False
+        report["errors"].append(f"CSV not found: {csv_path}")
+        return report
+
+    df = pd.read_csv(csv_path)
+    report["total_rows"] = len(df)
+
+    if len(df) == 0:
+        report["valid"] = False
+        report["errors"].append("CSV is empty (0 rows)")
+        return report
+
+    # ── 2. Required columns ───────────────────────────────────────────────
+    required_cols = ["image_path", "label", "symbol"]
+    missing_cols = [c for c in required_cols if c not in df.columns]
+    if missing_cols:
+        report["valid"] = False
+        report["errors"].append(f"Missing required columns: {missing_cols}")
+        return report
+
+    # ── 3. Fix Docker path prefixes (/app/...) ────────────────────────────
+    docker_prefix = "/app/"
+    if "image_path" in df.columns:
+        docker_mask = df["image_path"].astype(str).str.startswith(docker_prefix)
+        docker_count = int(docker_mask.sum())
+        if docker_count > 0:
+            if auto_fix:
+                df.loc[docker_mask, "image_path"] = (
+                    df.loc[docker_mask, "image_path"].astype(str).str[len(docker_prefix) :]
+                )
+                report["paths_fixed"] = docker_count
+                report["fixes_applied"].append(f"Stripped Docker /app/ prefix from {docker_count} image paths")
+                logger.info(
+                    "Pre-training validation: fixed %d Docker-prefixed paths in %s",
+                    docker_count,
+                    csv_path,
+                )
+            else:
+                report["warnings"].append(
+                    f"{docker_count} image paths have Docker /app/ prefix — pass auto_fix=True to strip them"
+                )
+
+    # ── 4. Remove duplicate image_path rows ───────────────────────────────
+    if "image_path" in df.columns:
+        dup_mask = df["image_path"].duplicated(keep="last")
+        dup_count = int(dup_mask.sum())
+        dup_pct = 100.0 * dup_count / len(df) if len(df) > 0 else 0.0
+
+        if dup_count > 0:
+            if auto_fix:
+                df = df[~dup_mask].reset_index(drop=True)
+                report["duplicates_removed"] = dup_count
+                report["fixes_applied"].append(f"Removed {dup_count} duplicate rows ({dup_pct:.1f}%)")
+                logger.info(
+                    "Pre-training validation: removed %d duplicate rows from %s",
+                    dup_count,
+                    csv_path,
+                )
+            elif dup_pct > max_duplicate_pct:
+                report["valid"] = False
+                report["errors"].append(
+                    f"{dup_count} duplicate image_path rows ({dup_pct:.1f}% > {max_duplicate_pct}% limit)"
+                )
+
+    # ── 5. Check NaN / empty in critical columns ─────────────────────────
+    for col in required_cols:
+        nan_count = int(df[col].isna().sum())
+        empty_count = int((df[col].astype(str).str.strip() == "").sum())
+        bad_count = nan_count + empty_count
+        if bad_count > 0:
+            if auto_fix:
+                before = len(df)
+                df = df.dropna(subset=[col])
+                df = df[df[col].astype(str).str.strip().ne("")]
+                removed = before - len(df)
+                if removed > 0:
+                    df = df.reset_index(drop=True)
+                    report["fixes_applied"].append(f"Removed {removed} rows with NaN/empty '{col}'")
+            else:
+                report["warnings"].append(f"Column '{col}' has {bad_count} NaN/empty values")
+
+    # ── 6. Validate label values ──────────────────────────────────────────
+    expected_labels = {"good_long", "good_short", "bad_long", "bad_short"}
+    actual_labels = set(df["label"].dropna().unique())
+    unexpected_labels = actual_labels - expected_labels
+    if unexpected_labels:
+        if auto_fix:
+            before = len(df)
+            df = df[df["label"].isin(expected_labels)].reset_index(drop=True)
+            removed = before - len(df)
+            if removed > 0:
+                report["fixes_applied"].append(f"Removed {removed} rows with unexpected labels: {unexpected_labels}")
+        else:
+            report["warnings"].append(f"Unexpected label values: {unexpected_labels}")
+
+    # ── 7. Image existence check ──────────────────────────────────────────
+    missing_count = 0
+    missing_per_symbol: dict[str, int] = {}
+    if check_images and "image_path" in df.columns:
+        exists_mask = df["image_path"].apply(lambda p: os.path.isfile(str(p).strip()))
+        missing_count = int((~exists_mask).sum())
+
+        if missing_count > 0:
+            # Compute per-symbol missing counts for diagnostics
+            missing_df = df[~exists_mask]
+            if "symbol" in missing_df.columns:
+                missing_per_symbol = missing_df["symbol"].value_counts().to_dict()
+
+            missing_pct = 100.0 * missing_count / len(df) if len(df) > 0 else 0.0
+
+            if auto_fix:
+                before = len(df)
+                df = df[exists_mask].reset_index(drop=True)
+                removed = before - len(df)
+                report["fixes_applied"].append(f"Removed {removed} rows with missing images ({missing_pct:.1f}%)")
+                if missing_per_symbol:
+                    top_missing = sorted(missing_per_symbol.items(), key=lambda x: -x[1])[:5]
+                    report["fixes_applied"].append(
+                        f"  Top missing by symbol: {', '.join(f'{s}={c}' for s, c in top_missing)}"
+                    )
+                logger.info(
+                    "Pre-training validation: removed %d rows with missing images (%.1f%%) from %s",
+                    removed,
+                    missing_pct,
+                    csv_path,
+                )
+                # Recompute missing count after fix
+                missing_count = 0
+            elif missing_pct > max_missing_image_pct:
+                report["valid"] = False
+                report["errors"].append(
+                    f"{missing_count} images missing ({missing_pct:.1f}% > {max_missing_image_pct}% limit)"
+                )
+
+    report["missing_images"] = missing_count
+    report["missing_per_symbol"] = missing_per_symbol
+
+    # ── 8. Row count gate ─────────────────────────────────────────────────
+    report["total_rows"] = len(df)
+    report["usable_rows"] = len(df)
+
+    if len(df) < min_total_rows:
+        report["valid"] = False
+        report["errors"].append(f"Only {len(df)} rows after cleanup (need ≥{min_total_rows})")
+
+    # ── 9. Label distribution analysis ────────────────────────────────────
+    if "label" in df.columns and len(df) > 0:
+        label_counts = df["label"].value_counts().to_dict()
+        report["label_distribution"] = {str(k): int(v) for k, v in label_counts.items()}
+
+        if label_counts:
+            max_label_count = max(label_counts.values())
+            min_label_count = min(label_counts.values())
+            if min_label_count > 0:
+                ratio = max_label_count / min_label_count
+                if ratio > max_label_imbalance_ratio:
+                    report["warnings"].append(
+                        f"Label imbalance: max/min ratio = {ratio:.2f} "
+                        f"(max={max_label_count}, min={min_label_count}, "
+                        f"limit={max_label_imbalance_ratio})"
+                    )
+            else:
+                missing_labels = [k for k, v in label_counts.items() if v == 0]
+                report["warnings"].append(f"Some labels have 0 samples: {missing_labels}")
+
+        # Check all 4 expected labels are present
+        present_labels = set(label_counts.keys())
+        absent = expected_labels - present_labels
+        if absent:
+            report["warnings"].append(f"Expected labels missing from data: {absent}")
+
+    # ── 10. Symbol distribution ───────────────────────────────────────────
+    if "symbol" in df.columns and len(df) > 0:
+        symbol_counts = df["symbol"].value_counts().to_dict()
+        report["symbol_distribution"] = {str(k): int(v) for k, v in symbol_counts.items()}
+        report["unique_symbols"] = len(symbol_counts)
+
+        if len(symbol_counts) < min_symbols:
+            report["valid"] = False
+            report["errors"].append(f"Only {len(symbol_counts)} symbol(s) in dataset (need ≥{min_symbols})")
+
+        # Flag symbols with very few samples
+        for sym, cnt in symbol_counts.items():
+            if cnt < 50:
+                report["warnings"].append(f"Symbol '{sym}' has only {cnt} samples — may be underrepresented")
+
+    # ── 11. Breakout type distribution ────────────────────────────────────
+    if "breakout_type" in df.columns and len(df) > 0:
+        bt_counts = df["breakout_type"].value_counts().to_dict()
+        report["breakout_type_distribution"] = {str(k): int(v) for k, v in bt_counts.items()}
+
+        # Warn if one type dominates > 98%
+        total = sum(bt_counts.values())
+        for bt, cnt in bt_counts.items():
+            pct = 100.0 * cnt / total if total > 0 else 0.0
+            if pct > 98.0:
+                report["warnings"].append(
+                    f"Breakout type '{bt}' is {pct:.1f}% of dataset — model may not generalise to other strategies"
+                )
+
+    # ── 12. Session distribution ──────────────────────────────────────────
+    if "session_key" in df.columns and len(df) > 0:
+        session_counts = df["session_key"].value_counts().to_dict()
+        report["session_distribution"] = {str(k): int(v) for k, v in session_counts.items()}
+
+        # Warn about deprecated frankfurt session in existing data
+        if "frankfurt" in session_counts:
+            report["warnings"].append(
+                f"Dataset contains {session_counts['frankfurt']} rows with deprecated "
+                "'frankfurt' session — these duplicate 'london' (same OR window)"
+            )
+
+    # ── 13. Feature range sanity checks ───────────────────────────────────
+    numeric_feature_cols = [
+        "quality_pct",
+        "volume_ratio",
+        "atr_pct",
+        "cvd_delta",
+        "nr7_flag",
+        "vwap_distance",
+        "day_of_week_norm",
+        "daily_bias_direction",
+        "daily_bias_confidence",
+    ]
+    for col in numeric_feature_cols:
+        if col in df.columns:
+            col_data = pd.to_numeric(df[col], errors="coerce")
+            nan_pct = 100.0 * col_data.isna().sum() / len(df) if len(df) > 0 else 0.0
+            if nan_pct > 50.0:
+                report["warnings"].append(f"Feature '{col}' is {nan_pct:.1f}% NaN — may default to neutral")
+            inf_count = int(np.isinf(col_data.dropna().values).sum()) if len(col_data.dropna()) > 0 else 0
+            if inf_count > 0:
+                report["warnings"].append(f"Feature '{col}' has {inf_count} Inf values")
+
+    # ── 14. Write back cleaned CSV if auto_fix made changes ───────────────
+    if auto_fix and report["fixes_applied"]:
+        df.to_csv(csv_path, index=False)
+        logger.info(
+            "Pre-training validation: wrote cleaned CSV to %s (%d rows, %d fixes applied)",
+            csv_path,
+            len(df),
+            len(report["fixes_applied"]),
+        )
+
+    # ── 15. Final summary ─────────────────────────────────────────────────
+    if report["valid"]:
+        logger.info(
+            "Pre-training validation PASSED — %d usable rows, %d symbols, %d labels | %s",
+            report["usable_rows"],
+            report.get("unique_symbols", 0),
+            len(report["label_distribution"]),
+            csv_path,
+        )
+    else:
+        logger.error(
+            "Pre-training validation FAILED — %d error(s): %s | %s",
+            len(report["errors"]),
+            "; ".join(report["errors"]),
+            csv_path,
+        )
+
+    if report["warnings"]:
+        for w in report["warnings"]:
+            logger.warning("Pre-training validation warning: %s", w)
+
+    if report["fixes_applied"]:
+        for f in report["fixes_applied"]:
+            logger.info("Pre-training validation fix: %s", f)
+
+    return report
+
+
+# ---------------------------------------------------------------------------
 # CLI entry point
 # ---------------------------------------------------------------------------
 
@@ -3150,7 +3492,6 @@ def _cli():
             "us",
             "london",
             "all",
-            "frankfurt",
             "tokyo",
             "shanghai",
             "cme",

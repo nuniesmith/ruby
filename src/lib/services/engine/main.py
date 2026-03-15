@@ -880,14 +880,6 @@ def _handle_check_orb_london_ny(engine) -> None:
     handle_orb_check(engine, orb_session=LONDON_NY_SESSION)
 
 
-def _handle_check_orb_frankfurt(engine) -> None:
-    """Check for Frankfurt/Xetra Open ORB patterns (03:00–03:30 ET / 08:00 CET)."""
-    from lib.services.engine.handlers import handle_orb_check
-    from lib.trading.strategies.rb.open import FRANKFURT_SESSION
-
-    handle_orb_check(engine, orb_session=FRANKFURT_SESSION)
-
-
 def _handle_check_orb_sydney(engine) -> None:
     """Check for Sydney/ASX Open ORB patterns (18:30–19:00 ET, overnight)."""
     from lib.services.engine.handlers import handle_orb_check
@@ -2501,7 +2493,6 @@ def main():
         ActionType.CHECK_ORB_SYDNEY: lambda: _handle_check_orb_sydney(engine),
         ActionType.CHECK_ORB_TOKYO: lambda: _handle_check_orb_tokyo(engine),
         ActionType.CHECK_ORB_SHANGHAI: lambda: _handle_check_orb_shanghai(engine),
-        ActionType.CHECK_ORB_FRANKFURT: lambda: _handle_check_orb_frankfurt(engine),
         ActionType.CHECK_ORB_LONDON: lambda: _handle_check_orb_london(engine),
         ActionType.CHECK_ORB_LONDON_NY: lambda: _handle_check_orb_london_ny(engine),
         ActionType.CHECK_ORB_CME_SETTLE: lambda: _handle_check_orb_cme_settle(engine),

@@ -142,7 +142,6 @@ _ALL_SESSION_KEYS: tuple[str, ...] = (
     "sydney",
     "tokyo",
     "shanghai",
-    "frankfurt",
     "london",
     "london_ny",
     "us",

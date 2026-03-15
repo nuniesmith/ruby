@@ -46,6 +46,9 @@ desktop.ini
 /data/
 archive/
 
+# --- Training dataset (generated images + CSVs — stored in Docker volume) ---
+dataset/
+
 # --- Logs ---
 *.log
 logs/

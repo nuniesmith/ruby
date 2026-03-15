@@ -274,7 +274,7 @@ class TestTrainerOnlyTalksToEngine:
         ):
             from lib.services.training.dataset_generator import load_bars
 
-            result = load_bars("MGC", source="engine", days=180)
+            result = load_bars("MGC", source="engine", days=365)
 
         assert result is not None and not result.empty, "EngineDataClient returned data — result must not be None"
         assert not massive_called, (
@@ -506,7 +506,7 @@ class TestEngineBarLoader:
         mock_resp.json.return_value = payload
 
         with patch("requests.get", return_value=mock_resp):
-            result = _load_bars_from_engine("MGC", days=180)
+            result = _load_bars_from_engine("MGC", days=365)
 
         assert result is not None
         assert len(result) == 200
@@ -523,7 +523,7 @@ class TestEngineBarLoader:
         mock_resp.json.return_value = payload
 
         with patch("requests.get", return_value=mock_resp):
-            result = _load_bars_from_engine("MGC", days=180)
+            result = _load_bars_from_engine("MGC", days=365)
 
         assert result is None, (
             "Engine returned 0 bars but loader didn't return None — "
@@ -592,7 +592,7 @@ class TestEngineBarLoader:
             patch("lib.services.training.dataset_generator._ENGINE_FILL_POLL_INTERVAL", 0),
             patch("lib.services.training.dataset_generator._ENGINE_FILL_POLL_MAX_WAIT", 1),
         ):
-            result = _load_bars_from_engine("MGC", days=180)
+            result = _load_bars_from_engine("MGC", days=365)
 
         assert result is not None
         # Should have polled the fill status URL
@@ -848,7 +848,7 @@ class TestLogRegressions:
         # _load_bars_from_engine imports requests locally as _requests — patch at
         # the source module level so the local alias is intercepted correctly.
         with patch("requests.get", return_value=mock_resp):
-            result = _load_bars_from_engine("MGC", days=180)
+            result = _load_bars_from_engine("MGC", days=365)
 
         assert result is None, (
             "Engine returned 0 bars but loader returned non-None.  "

@@ -1306,12 +1306,12 @@ class TestFeatureContractGeneration:
                 f"breakout_type_ord out of range for {name}: {info['breakout_type_ord']}"
             )
 
-    def test_sessions_section_has_9_sessions(self):
+    def test_sessions_section_has_8_sessions(self):
         from lib.analysis.ml.breakout_cnn import generate_feature_contract
 
         contract = generate_feature_contract()
         sess = contract["session_thresholds"]
-        assert len(sess) == 9
+        assert len(sess) == 8
 
     def test_sessions_have_required_fields(self):
         from lib.analysis.ml.breakout_cnn import generate_feature_contract
@@ -1383,7 +1383,7 @@ class TestFeatureContractGeneration:
         assert loaded["num_tabular"] == contract["num_tabular"]
         assert loaded["tabular_features"] == contract["tabular_features"]
         assert len(loaded["breakout_types"]) == 13
-        assert len(loaded["session_thresholds"]) == 9
+        assert len(loaded["session_thresholds"]) == 8
 
     def test_write_creates_parent_directories(self, tmp_path):
         import os

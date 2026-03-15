@@ -63,7 +63,6 @@ from lib.trading.strategies.rb.open import (  # noqa: F401, E402
     CRYPTO_UTC_NOON_SESSION,
     DATASET_SESSIONS,
     DAYTIME_SESSIONS,
-    FRANKFURT_SESSION,
     LONDON_NY_SESSION,
     LONDON_SESSION,
     MAX_OR_BARS,

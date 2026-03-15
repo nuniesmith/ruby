@@ -128,7 +128,7 @@ services:
             # Dataset generation defaults
             # ----------------------------------------------------------------
             - CNN_RETRAIN_SYMBOLS=${CNN_RETRAIN_SYMBOLS:-MGC,SIL,MES,MNQ,M2K,MYM,ZN,ZB,ZW}
-            - CNN_RETRAIN_DAYS_BACK=${CNN_RETRAIN_DAYS_BACK:-180}
+            - CNN_RETRAIN_DAYS_BACK=${CNN_RETRAIN_DAYS_BACK:-365}
             - CNN_RETRAIN_ORB_SESSION=${CNN_RETRAIN_ORB_SESSION:-all}
             - CNN_ORB_SESSION=${CNN_ORB_SESSION:-all}
 
@@ -143,10 +143,14 @@ services:
             - NVIDIA_DRIVER_CAPABILITIES=compute,utility
 
         volumes:
-            # Bind-mounts — files land directly on the host so rsync can
-            # pull models/ without any docker cp / volume-export dance.
+            # Models — bind-mount so champion .pt files are visible on the
+            # host for git tracking and rsync to the production server.
             - ./models:/app/models
-            - ./dataset:/app/dataset
+            # Dataset — named volume for generated images + CSVs.
+            # Easy to wipe:  docker volume rm ruby_trainer_dataset
+            # Not in source control — regenerated from the pipeline.
+            - trainer_dataset:/app/dataset
+            # Data & source — bind-mounts for live development.
             - ./data:/app/data
             - ./scripts:/app/scripts
             - ./src:/app/src
@@ -166,3 +170,9 @@ services:
             timeout: 10s
             start_period: 60s
             retries: 3
+
+# ---------------------------------------------------------------------------
+# Named volumes
+# ---------------------------------------------------------------------------
+volumes:
+    trainer_dataset:

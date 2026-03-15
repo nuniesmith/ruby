@@ -376,7 +376,7 @@ _ORB_CONFIG = RangeConfig(
     min_body_ratio=0.55,
     min_bars=5,
     extra={
-        "sessions": ["us", "london", "london_ny", "frankfurt"],
+        "sessions": ["us", "london", "london_ny"],
         "min_or_bars": 20,
     },
 )
