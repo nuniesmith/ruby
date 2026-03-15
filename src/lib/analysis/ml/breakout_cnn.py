@@ -1051,13 +1051,7 @@ if _TORCH_AVAILABLE:
             dropped_empty = initial_count - len(self.df)
 
             # 2. Verify image files actually exist on disk
-            def _resolve(p: str) -> str:
-                p = str(p).strip()
-                if self.image_root and not os.path.isabs(p):
-                    return os.path.join(self.image_root, p)
-                return p
-
-            exists_mask = self.df["image_path"].apply(lambda p: os.path.isfile(_resolve(str(p))))  # type: ignore[union-attr]
+            exists_mask = self.df["image_path"].apply(lambda p: os.path.isfile(self._resolve_image_path(str(p))))  # type: ignore[union-attr]
             dropped_missing = int((~exists_mask).sum())  # type: ignore[arg-type]
             self.df = self.df[exists_mask]
 
@@ -1076,6 +1070,54 @@ if _TORCH_AVAILABLE:
 
             logger.info("BreakoutDataset loaded: %d samples from %s", len(self.df), csv_path)
 
+        def _resolve_image_path(self, p: str) -> str:
+            """Resolve an image path from CSV to an on-disk location.
+
+            Handles every path variant the pipeline can produce:
+              1. Absolute Docker path: /app/dataset/images/X.png
+                 → works inside container as-is; also try stripping /app/
+              2. Validator-stripped relative: dataset/images/X.png
+                 → would double-nest with image_root; extract basename
+              3. Bare filename: X.png
+                 → join with image_root
+              4. Absolute non-Docker path: /some/other/X.png
+                 → use as-is
+            """
+            p = str(p).strip()
+
+            # Fast path: the path already exists (absolute Docker path inside
+            # the container, or any other valid absolute/relative path).
+            if os.path.isfile(p):
+                return p
+
+            # Strip Docker /app/ prefix if present (common when CSV is
+            # written inside a container but read on the host or after the
+            # pre-training validator has already stripped it partially).
+            _DOCKER_PREFIX = "/app/"
+            bare = p
+            if bare.startswith(_DOCKER_PREFIX):
+                bare = bare[len(_DOCKER_PREFIX) :]
+
+            # If image_root is set, try multiple resolution strategies:
+            if self.image_root:
+                # Strategy A: join image_root + bare path as-is
+                candidate = os.path.join(self.image_root, bare)
+                if os.path.isfile(candidate):
+                    return candidate
+
+                # Strategy B: use only the filename (basename) to avoid
+                # double-nesting like /app/dataset/images/dataset/images/X.png
+                basename = os.path.basename(bare)
+                candidate = os.path.join(self.image_root, basename)
+                if os.path.isfile(candidate):
+                    return candidate
+
+            # Fallback: return the best-effort path (may not exist — caller
+            # will handle the missing-file case).
+            if self.image_root and not os.path.isabs(bare):
+                return os.path.join(self.image_root, os.path.basename(bare))
+            return p
+
         def __len__(self) -> int:
             return len(self.df)
 
@@ -1083,9 +1125,7 @@ if _TORCH_AVAILABLE:
             row = self.df.iloc[idx]  # type: ignore[union-attr]
 
             # --- Image ---
-            img_path = str(row["image_path"]).strip()
-            if self.image_root and not os.path.isabs(img_path):
-                img_path = os.path.join(self.image_root, img_path)
+            img_path = self._resolve_image_path(str(row["image_path"]))
 
             valid = True  # tracks whether this sample should be used
             try:
