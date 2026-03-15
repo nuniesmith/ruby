@@ -49,10 +49,14 @@ Rithmic (async_rithmic)  →  Main account order + 1:1 copy to all slave account
 | v8 model (latest) | ⚠️ 83.3% acc / 83.4% prec / 83.3% rec — 37 features, epoch 56/60 — **overfitting** (99.7% train vs 83.3% val = 16.4% gap) — see RETRAIN phase |
 | Feature contract | v8 code complete — 37 tabular features + embeddings |
 | v8 smoke test | ✅ 31/31 tests passing (`test_v8_smoke.py`) |
-| Full test suite | ✅ 2834+ passed, 1 skipped, 1 pre-existing risk test failure (account_size change) |
-| Dataset paths | ✅ **FIXED 2026-03-14** — Docker `/app/` prefix stripped, all 28,548 images verified on disk |
+| Full test suite | ✅ 917+ passed, 1 skipped (network-dependent test excluded) |
+| Dataset paths | ✅ **FIXED 2026-03-14** — Docker `/app/` prefix stripped; pre-training validator now auto-fixes on every run |
 | CUDA training | ✅ **VERIFIED 2026-03-14** — 2-epoch test passed on oryx RTX 3080 16GB (torch 2.10+cu128) |
-| Dataset validation | ✅ All 28,548 rows valid, 0 missing images, labels balanced (52.9% good / 47.1% bad), all 9 sessions represented |
+| Dataset validation | ✅ Comprehensive `validate_dataset_pre_training()` gate wired into pipeline — checks structure, images, labels, balance, coverage |
+| Dataset storage | ✅ **CHANGED 2026-03-14** — switched from bind-mount `./dataset` to named Docker volume `trainer_dataset`; `models/` remains bind-mount |
+| Dataset wipe | ✅ **NEW 2026-03-14** — `POST /dataset/wipe` API + `scripts/wipe_dataset.sh --force` for fresh starts |
+| Frankfurt session | ✅ **REMOVED 2026-03-14** — duplicated London's 03:00 OR window; removed from all configs, ordinals (8 sessions now), scheduling, strategies |
+| Days back default | ✅ **CHANGED 2026-03-14** — `DEFAULT_DAYS_BACK` 180→365, max 730 (env: `CNN_RETRAIN_DAYS_BACK`) |
 | Per-asset training | ✅ Infrastructure built — `train_mode=per_asset\|per_group\|combined` in TrainRequest, per-asset model loading with fallback chain |
 | CNN regularization | ✅ Upgraded — dropout 0.4→0.5, label smoothing 0.10→0.15, weight decay 1e-4→2e-4, stronger augmentation, patience 15→12 |
 | Rithmic EOD close | ✅ wired into `DashboardEngine._loop()` — uses `OrderPlacement.MANUAL` |
@@ -127,34 +131,46 @@ Rithmic (async_rithmic)  →  Main account order + 1:1 copy to all slave account
 
 > Fix the v8 issues and retrain. Goal: beat v6 champion (87.1% acc) with the v8 architecture.
 >
-> **Dataset validation (2026-03-14 oryx session):**
+> **Pipeline hardening (2026-03-14 evening session) — ALL COMMITTED `c8f3bff`:**
+> - ✅ `frankfurt` session removed (duplicated London 03:00 OR window) — 8 sessions now
+> - ✅ Pre-training validator `validate_dataset_pre_training()` — 15-check gate with auto-fix, wired into pipeline
+> - ✅ Dataset storage switched to named Docker volume `trainer_dataset` (was bind-mount `./dataset`)
+> - ✅ `POST /dataset/wipe` API + `scripts/wipe_dataset.sh --force` for fresh starts
+> - ✅ `DEFAULT_DAYS_BACK` 180→365, max 730 — env: `CNN_RETRAIN_DAYS_BACK`
+> - ✅ Tracked dataset CSVs removed from repo, `dataset/` added to `.gitignore`
+> - ✅ Tests updated: session count 9→8, days_back 180→365 (917 passed)
+>
+> **Previous dataset validation (2026-03-14 oryx session — pre-wipe baseline):**
 > - 28,548 rows, ALL images verified ✅ (Docker `/app/` prefix fixed)
 > - Labels: good_long 26.7%, good_short 26.3%, bad_long 24.5%, bad_short 22.6% — well balanced
 > - Breakout types: ORB 95.8%, BollingerSqueeze 2.1%, Fibonacci 1.3%, Consolidation 0.5% — **still heavily ORB-dominant**
-> - Sessions: all 9 represented (US 17.2%, london_ny 12.9%, london 12.3%, ...) — fixed from 87% US
-> - Symbols: 18 symbols, focus 9 well-represented (8.7–11.0% each), forex tiny (0.1–0.8%)
+> - Sessions: all 8 represented (US 17.2%, london_ny 12.9%, london 12.3%, ...) — fixed from 87% US
+> - Symbols: 9 focus symbols well-represented (8.7–11.0% each)
 > - CUDA training verified: 2-epoch test passed on RTX 3080 16GB
 >
-> **Scripts created for retrain workflow:**
+> **Scripts & utilities for retrain workflow:**
 > - `scripts/fix_dataset_paths.py` — strips Docker `/app/` prefix (done ✅)
-> - `scripts/validate_dataset.py` — full dataset health report
+> - `scripts/validate_dataset.py` — full dataset health report (CLI)
 > - `scripts/test_training_local.py` — local CUDA training test (3 epochs on real data)
 > - `scripts/run_full_retrain.py` — orchestrates full v9 pipeline via trainer HTTP API
-> - `scripts/run_per_group_training.py` — per-group training orchestrator
+> - `scripts/run_per_group_training.py` — per-group training comparison orchestrator
+> - `scripts/wipe_dataset.sh` — **NEW** — wipe Docker volume for fresh dataset generation
 
-### RETRAIN-A: Fix missing images (biggest free win)
+### ✅ RETRAIN-A: Fix missing images (biggest free win) — DONE
 - [x] Investigate why 44% of CSV rows have no corresponding image files — **root cause: Docker `/app/` path prefix in CSV, images existed on disk all along**
 - [x] Re-run dataset generation with `skip_existing=False` (or just for the missing images) — added `POST /train/repair` endpoint + `step="repair"` pipeline
 - [x] Verify all 54,634 rows now have valid images before retraining — added `GET /train/validate` endpoint
 - [x] **Fix dataset paths** — stripped `/app/` prefix from labels.csv, train.csv, val.csv (2026-03-14 oryx session). All 28,548 images verified on disk ✅
 - [x] Expected impact: nearly doubles effective training data (30K → 55K samples) — **CONFIRMED: was a path issue not missing data**
+- [x] **Pre-training validator now auto-fixes** `/app/` prefix on every pipeline run — no manual fix needed going forward
 
-### RETRAIN-B: Get more historical data
+### ✅ RETRAIN-B: Get more historical data — INFRA DONE, awaiting regen
 - [x] Current: ~50,000 bars per asset (~88-111 trading days)
 - [x] Target: increase `CNN_RETRAIN_DAYS_BACK` to 365 (1 year) — changed `DEFAULT_DAYS_BACK` default from 180 → 365 in `trainer_server.py`
 - [x] PrevDay/Weekly/Monthly/InsideDay all need longer timeframes to generate trades
 - [x] This is the most impactful change for minority strategy data
-- [ ] TODO: Re-generate dataset with 365 days to get more minority strategy samples (run `scripts/run_full_retrain.py --start-step 3`)
+- [x] Dataset volume switched to named Docker volume for easy wipe/regen
+- [ ] **TODO: Deploy to oryx, wipe dataset, run full pipeline with 365 days** — `./scripts/wipe_dataset.sh --force` then `python scripts/run_full_retrain.py`
 
 ### RETRAIN-C: Try per-asset and per-group training
 - [x] Infrastructure is now built: `train_mode=per_asset|per_group|combined` in TrainRequest
@@ -167,7 +183,7 @@ Rithmic (async_rithmic)  →  Main account order + 1:1 copy to all slave account
 - [x] Use weighted sampler to oversample minority strategies (BollingerSqueeze, Fibonacci, Consolidation) — added `WeightedRandomSampler` in `train_model()` with 3× boost
 - [ ] TODO: Increase `max_samples_per_type_label` cap (currently 800) after getting 365-day data
 - [ ] TODO: Consider adding "no trade" / "no setup" samples for when conditions don't warrant entry
-- [ ] **NOTE**: Current dataset is 95.8% ORB — need more data (365 days) to get meaningful minority samples
+- [ ] **NOTE**: Previous dataset was 95.8% ORB — 365-day regen should improve minority representation
 
 ### RETRAIN-E: Verify regularization improvements take effect
 - [x] Regularization already upgraded: dropout 0.5, label smoothing 0.15, weight decay 2e-4, stronger augmentation
@@ -181,15 +197,34 @@ Rithmic (async_rithmic)  →  Main account order + 1:1 copy to all slave account
 - [ ] Paper-trade for 1 week with v9 before going live
 - [ ] If per-asset models win, deploy the ensemble
 
+### ✅ RETRAIN-G: Pipeline hardening (2026-03-14) — DONE
+- [x] Remove `frankfurt` session — duplicated London's 03:00 OR window, caused duplicate training rows
+- [x] Re-index `SESSION_ORDINAL` to 8 sessions (0/7 through 7/7, no gaps)
+- [x] Add `validate_dataset_pre_training()` — 15-check gate with auto-fix, wired as mandatory step before GPU training
+- [x] Switch dataset from bind-mount to named Docker volume `trainer_dataset`
+- [x] Add `POST /dataset/wipe` API endpoint + `scripts/wipe_dataset.sh`
+- [x] Set `DEFAULT_DAYS_BACK=365`, max 730 via `TrainRequest.days_back`
+- [x] Remove tracked dataset CSVs from repo, add `dataset/` to `.gitignore`
+- [x] Update tests: session count 9→8, days_back 180→365 (917 passed, 1 skipped)
+- [x] Committed `c8f3bff`, pushed to `origin/main`
+
 **Retrain execution plan (run from oryx):**
-1. `python scripts/fix_dataset_paths.py` — ✅ DONE
-2. `python scripts/validate_dataset.py` — ✅ DONE (28,548 valid)
-3. `python scripts/run_full_retrain.py --trainer-url http://trainer:8200` — TODO: runs steps 3–8
-4. `python scripts/run_per_group_training.py --trainer-url http://trainer:8200` — TODO: compare groups
+1. `git pull origin main && docker compose -f docker-compose.trainer.yml build trainer` — pull hardening changes
+2. `./scripts/wipe_dataset.sh --force` — wipe old dataset volume
+3. `python scripts/run_full_retrain.py --trainer-url http://localhost:8200` — full 8-step pipeline (load 365d bars → generate → validate → train → compare)
+4. `python scripts/run_per_group_training.py --trainer-url http://localhost:8200` — compare groups vs combined
+5. `curl http://localhost:8200/train/validate` — check dataset health
+6. `curl http://localhost:8200/models/compare` — compare new model vs v6 champion
+
+**What to watch for after retrain:**
+- Dataset size should grow significantly (target 50K+ rows vs 28.5K from ~90 days)
+- ORB dominance should drop below 95% — BollingerSqueeze/Fibonacci/Consolidation should gain share
+- Train/val gap should be <8% (was 16.4% in v8)
+- Target: >87.1% validation accuracy to beat v6 champion
 
 **Files**: `src/lib/analysis/ml/breakout_cnn.py`, `src/lib/services/training/trainer_server.py`, `src/lib/services/training/dataset_generator.py`
-**New scripts**: `scripts/fix_dataset_paths.py`, `scripts/validate_dataset.py`, `scripts/test_training_local.py`, `scripts/run_full_retrain.py`, `scripts/run_per_group_training.py`
-**Estimated effort**: 2–3 sessions (mostly waiting for training runs)
+**New scripts**: `scripts/fix_dataset_paths.py`, `scripts/validate_dataset.py`, `scripts/test_training_local.py`, `scripts/run_full_retrain.py`, `scripts/run_per_group_training.py`, `scripts/wipe_dataset.sh`
+**Estimated effort**: 1–2 sessions (deploy + run pipeline, mostly waiting for training)
 
 ---
 
@@ -1287,13 +1322,21 @@ Full specs for all of the above: [`docs/backlog.md`](docs/backlog.md)
 ## Pre-Retrain Readiness — Summary
 
 > v8 training ran but did NOT beat v6 champion (83.3% vs 87.1%).
-> Regularization upgraded, per-asset training infra built. Ready for v9 retrain.
+> Regularization upgraded, per-asset training infra built. Pipeline hardened 2026-03-14.
 >
 > **2026-03-14 oryx session findings:**
 > - Dataset path issue FIXED — all 28,548 images were on disk, just had wrong prefix
 > - CUDA training VERIFIED — 2-epoch test on RTX 3080, model loads/trains/saves correctly
 > - torchvision was missing from venv — installed (0.25.0)
 > - 6 retrain scripts created for automated pipeline execution
+>
+> **2026-03-14 evening session — pipeline hardening (committed `c8f3bff`):**
+> - `frankfurt` session removed (duplicated London) — 8 sessions now
+> - Pre-training validator with 15 checks + auto-fix wired into pipeline
+> - Dataset switched to named Docker volume `trainer_dataset`
+> - Wipe utilities added: API + shell script
+> - `DEFAULT_DAYS_BACK` 180→365, max 730
+> - Tests updated and passing (917 passed)
 
 ### ✅ Confirmed working
 - `feature_contract.json` v8: 37 features, embeddings (4+8=12), gate checks
@@ -1305,10 +1348,13 @@ Full specs for all of the above: [`docs/backlog.md`](docs/backlog.md)
 - Per-asset model loading: `_resolve_model_name()` → per-asset → per-group → combined fallback
 - Multi-model cache: `_model_cache` dict keyed by path (supports concurrent per-asset + combined)
 - Peer bar loading: `_resolve_peer_tickers()` → `bars_by_ticker` dict
-- Test suite: 2834+ passed (93 new tests added 2026-03-14)
-- Dataset paths: all 28,548 rows → images verified on disk ✅ (2026-03-14)
+- Test suite: 917+ passed (2026-03-14 evening, post-hardening)
+- Dataset paths: auto-fixed by `validate_dataset_pre_training()` on every pipeline run
 - CUDA training: 2-epoch test passed on RTX 3080 (2026-03-14)
 - Model: 20,991,086 parameters, EfficientNetV2-S backbone + tabular head
+- Pre-training validation gate: mandatory before GPU training, aborts on critical failures
+- Dataset wipe: `POST /dataset/wipe` API + `scripts/wipe_dataset.sh --force`
+- Frankfurt removed: 8 sessions, SESSION_ORDINAL re-indexed 0/7 through 7/7
 
 ### v8 Training Results (2026-03-13)
 | Metric | v6 Champion | v8 Result | Delta |
@@ -1321,18 +1367,18 @@ Full specs for all of the above: [`docs/backlog.md`](docs/backlog.md)
 | Best Epoch | 25 | 56/60 | — |
 | Dataset Size | — | 30,375 used / 54,634 available | Path prefix issue — **all 28,548 are valid** |
 
-### Dataset Analysis (2026-03-14 oryx validation)
+### Dataset Analysis (2026-03-14 oryx validation — pre-wipe baseline)
 | Category | Value | Note |
 |----------|-------|------|
 | Total rows | 28,548 | All images verified |
 | Good/Bad split | 52.9% / 47.1% | Well balanced |
-| ORB dominance | 95.8% | **Key issue — need 365-day regen** |
+| ORB dominance | 95.8% | **Key issue — 365-day regen should improve** |
 | BollingerSqueeze | 2.1% (606) | Needs more data |
 | Fibonacci | 1.3% (365) | Needs more data |
 | Consolidation | 0.5% (155) | Needs more data |
 | Focus symbols (9) | 8.7–11.0% each | Good coverage |
 | Forex symbols | 0.1–0.8% each | Consider excluding |
-| Sessions | All 9 represented | US=17.2%, balanced |
+| Sessions | All 8 represented | US=17.2%, balanced (frankfurt removed) |
 
 ---
 
@@ -1346,11 +1392,11 @@ Full specs for all of the above: [`docs/backlog.md`](docs/backlog.md)
 ## 📊 Priority Matrix — Session Planning Guide
 
 > Use this to pick tasks for each AI agent session. Top-to-bottom priority.
-> Updated 2026-03-14 after oryx session: dataset fixed, CUDA verified, scaffolding done, 93 new tests.
+> Updated 2026-03-14 evening: pipeline hardening committed (`c8f3bff`), ready to deploy + retrain on oryx.
 
 | Priority | Phase | Est. Sessions | Depends On | Status |
 |----------|-------|---------------|------------|--------|
-| 🔴 1 | **RETRAIN v9** | 1–2 | — | **NEXT: Run `scripts/run_full_retrain.py` on oryx** — dataset fixed, CUDA verified, scripts ready |
+| 🔴 1 | **RETRAIN v9** | 1 | — | **NEXT: Deploy to oryx → wipe dataset → run full pipeline** — all hardening committed, 365-day default set |
 | 🔴 2 | RETRAIN per-group | 1 | RETRAIN combined | Run `scripts/run_per_group_training.py` — compare groups vs combined |
 | 🟡 3 | **KRAKEN-SIM** (C–D remain) | 2–3 | — | ✅ SimulationEngine + API + DOM live data built — pre-trade analysis + settings toggle remain |
 | 🟡 4 | **DATA-ROLLING** (D remains) | 1 | — | ✅ Sync service + retention + Redis cache built — trainer pipeline wiring remains |
@@ -1389,6 +1435,7 @@ Full specs for all of the above: [`docs/backlog.md`](docs/backlog.md)
 | `scripts/test_training_local.py` | 628 | Local CUDA training test (real data, 3 epochs) |
 | `scripts/run_full_retrain.py` | 1038 | Full v9 retrain pipeline orchestrator |
 | `scripts/run_per_group_training.py` | 731 | Per-group training comparison orchestrator |
+| `scripts/wipe_dataset.sh` | 153 | Wipe trainer dataset Docker volume for fresh starts |
 | `src/tests/test_dataset_validation.py` | 303 | 13 tests for validate_dataset() |
 | `src/tests/test_trainer_endpoints.py` | 503 | 31 tests for trainer server HTTP endpoints |
 | `src/tests/test_rithmic_account.py` | 537 | 49 tests for Rithmic account config + encryption |
