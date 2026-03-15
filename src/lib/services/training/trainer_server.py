@@ -73,7 +73,7 @@ from zoneinfo import ZoneInfo
 import uvicorn
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from lib.core.logging_config import get_logger, setup_logging
 
@@ -419,6 +419,38 @@ class TrainRequest(BaseModel):
     """
 
     symbols: list[str] | None = Field(None, description="Symbols to generate dataset for")
+
+    @field_validator("symbols", mode="before")
+    @classmethod
+    def _normalise_symbols(cls, v: Any) -> list[str] | None:  # noqa: ANN401
+        """Split space-joined or comma-joined symbol strings defensively.
+
+        Handles every common mistake:
+          - ["MGC SIL MES"]  → ["MGC", "SIL", "MES"]   (space-joined)
+          - ["MGC,SIL,MES"]  → ["MGC", "SIL", "MES"]   (comma-joined)
+          - "MGC SIL MES"    → ["MGC", "SIL", "MES"]   (bare string)
+          - ["MGC", "SIL"]   → ["MGC", "SIL"]           (already correct)
+        """
+        import re
+
+        if v is None:
+            return None
+        # If caller passed a bare string instead of a list, wrap it
+        if isinstance(v, str):
+            v = [v]
+        if not isinstance(v, (list, tuple)):
+            return v  # let Pydantic's own type check handle it
+        flat: list[str] = []
+        for item in v:
+            if isinstance(item, str):
+                # Split on any mix of commas and/or whitespace
+                flat.extend(tok for tok in re.split(r"[\s,]+", item.strip()) if tok)
+            else:
+                flat.append(item)
+        # Upper-case normalisation (symbols are always uppercase)
+        flat = [s.upper() for s in flat]
+        return flat if flat else None
+
     days_back: int | None = Field(None, ge=1, le=730, description="Days of history (default: 365)")
     breakout_type: str = Field("all", description="ORB | PrevDay | InitialBalance | Consolidation | all")
     orb_session: str | None = Field(None, description="Session filter (us, london, all, ...)")

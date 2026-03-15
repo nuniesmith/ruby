@@ -602,7 +602,7 @@ tr:hover td{background:var(--bg-inner)}
           </div>
           <div class="field-row">
             <label class="field-lbl">Days Back</label>
-            <input type="number" id="c-days" value="180" min="7" max="365"/>
+            <input type="number" id="c-days" value="365" min="7" max="730"/>
           </div>
           <div class="field-row">
             <label class="field-lbl">Bars Source</label>
@@ -621,7 +621,7 @@ tr:hover td{background:var(--bg-inner)}
               <option value="us">us</option>
               <option value="london">london</option>
               <option value="london_ny">london_ny</option>
-              <option value="frankfurt">frankfurt</option>
+
               <option value="tokyo">tokyo</option>
               <option value="shanghai">shanghai</option>
               <option value="sydney">sydney</option>
@@ -1097,7 +1097,8 @@ async function refreshModels() {
 // ═══════════════════════════════════════════════════════
 function buildPayload() {
   const symRaw = document.getElementById('c-symbols').value.trim();
-  const symbols = symRaw ? symRaw.split(',').map(s=>s.trim()).filter(Boolean) : null;
+  // Split on commas, whitespace, or any mix — so "MGC SIL MES" and "MGC,SIL,MES" both work
+  const symbols = symRaw ? symRaw.split(/[\s,]+/).filter(Boolean) : null;
 
   const payload = {
     epochs:        parseInt(document.getElementById('c-epochs').value),

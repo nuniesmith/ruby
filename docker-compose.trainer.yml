@@ -127,7 +127,7 @@ services:
             # ----------------------------------------------------------------
             # Dataset generation defaults
             # ----------------------------------------------------------------
-            - CNN_RETRAIN_SYMBOLS=${CNN_RETRAIN_SYMBOLS:-MGC,SIL,MES,MNQ,M2K,MYM,ZN,ZB,ZW}
+            - CNN_RETRAIN_SYMBOLS=${CNN_RETRAIN_SYMBOLS:-MGC,SIL,MES,MNQ,M2K,MYM,ZN}
             - CNN_RETRAIN_DAYS_BACK=${CNN_RETRAIN_DAYS_BACK:-365}
             - CNN_RETRAIN_ORB_SESSION=${CNN_RETRAIN_ORB_SESSION:-all}
             - CNN_ORB_SESSION=${CNN_ORB_SESSION:-all}

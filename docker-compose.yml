@@ -428,7 +428,7 @@ services:
             # DataResolver → Kraken REST API with automatic Postgres/Redis
             # backfill so subsequent training runs hit the warm cache.
             # ----------------------------------------------------------------
-            - CNN_RETRAIN_SYMBOLS=${CNN_RETRAIN_SYMBOLS:-MGC,SIL,MES,MNQ,M2K,MYM,ZN,ZB,ZW}
+            - CNN_RETRAIN_SYMBOLS=${CNN_RETRAIN_SYMBOLS:-MGC,SIL,MES,MNQ,M2K,MYM,ZN}
             - CNN_RETRAIN_DAYS_BACK=${CNN_RETRAIN_DAYS_BACK:-365}
             # "engine" routes all bar requests through the data service
             # (http://data:8000), which handles Redis/Postgres caching and
