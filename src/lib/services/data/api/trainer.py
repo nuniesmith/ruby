@@ -1098,7 +1098,7 @@ async function refreshModels() {
 function buildPayload() {
   const symRaw = document.getElementById('c-symbols').value.trim();
   // Split on commas, whitespace, or any mix — so "MGC SIL MES" and "MGC,SIL,MES" both work
-  const symbols = symRaw ? symRaw.split(/[\s,]+/).filter(Boolean) : null;
+  const symbols = symRaw ? symRaw.split(/[\\s,]+/).filter(Boolean) : null;
 
   const payload = {
     epochs:        parseInt(document.getElementById('c-epochs').value),
