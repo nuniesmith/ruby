@@ -644,6 +644,13 @@ jobs:
                       # Also stop any standalone trainer compose instances
                       docker compose -f "$PROJ_DIR/docker-compose.trainer.yml" down 2>/dev/null || true
 
+                      # Remove any orphaned ruby-* containers that were started outside of
+                      # Compose (e.g. via manual `docker run`).  $DC down --remove-orphans
+                      # only cleans up containers it knows about; manually-created containers
+                      # with the same name will block `docker compose up` with a name conflict.
+                      echo "🧹 Removing any orphaned ruby-* containers..."
+                      docker ps -a --filter "name=ruby-" --format "{{.Names}}" | xargs -r docker rm -f 2>/dev/null || true
+
                       # Log in to Docker Hub and pull ALL service images
                       echo "🐳 Pulling latest images from Docker Hub..."
                       echo "${{ secrets.DOCKER_TOKEN }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin 2>/dev/null || true
