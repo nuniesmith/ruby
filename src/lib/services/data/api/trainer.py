@@ -668,7 +668,7 @@ tr:hover td{background:var(--bg-inner)}
         <hr class="section-sep"/>
         <div class="card-title" style="margin-bottom:8px">Symbols</div>
         <div class="field-row">
-          <label class="field-lbl">Custom symbol list (comma-separated — blank = all 22 defaults)</label>
+          <label class="field-lbl">Custom symbol list (comma-separated — blank = all 7 defaults)</label>
           <input type="text" id="c-symbols" placeholder="e.g. MES,MNQ,MGC  or leave blank for all"/>
         </div>
         <div style="font-size:0.68rem;color:var(--faint);margin-top:3px" id="sym-hint">
